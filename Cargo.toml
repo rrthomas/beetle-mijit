@@ -1,5 +1,6 @@
 [package]
 name = "beetle-mijit"
+authors = ["Reuben Thomas", "Alistair Turnbull"]
 version = "0.1.0"
 edition = "2018"
 
@@ -8,3 +9,4 @@ edition = "2018"
 [dependencies]
 mijit = "0.1.1"
 memoffset = "0.6"
+clap = "3.0.0-beta.4"
