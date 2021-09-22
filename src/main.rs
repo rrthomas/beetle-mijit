@@ -1,19 +1,14 @@
 use std::convert::{TryFrom};
 use std::num::{Wrapping};
 use memoffset::{offset_of};
-
 use mijit::target::{Target, Word};
 use mijit::{jit};
 use mijit::code::{
-    self, Switch, Precision, UnaryOp, BinaryOp, Width,
-    Global, Slot, Register, Variable, IntoVariable, REGISTERS,
-    Action, Case, Convention, Marshal,
+    self, UnaryOp, BinaryOp, Global, Slot, Register, REGISTERS, Variable,
+    Switch, Case, Convention, Marshal,
 };
-use Precision::*;
 use UnaryOp::*;
 use BinaryOp::*;
-use Width::*;
-use Action::*;
 
 /** Beetle's registers that are live in `State::Root`. */
 #[repr(C)]
@@ -216,7 +211,7 @@ impl<T: Target> VM<T> {
         assert!(Self::is_aligned(ep));
         self.registers_mut().ep = ep;
         self.state.memory = self.memory.as_mut_ptr() as u64;
-        *self.jit.global_mut(code::Global(0)) = Word {mp: (&mut self.state as *mut AllRegisters).cast()};
+        *self.jit.global_mut(Global(0)) = Word {mp: (&mut self.state as *mut AllRegisters).cast()};
         let (jit, trap) = self.jit.execute(&State::Root).expect("Execute failed");
         assert_eq!(trap, Trap::Halt);
         self.jit = jit;
@@ -255,247 +250,17 @@ const LOOP_OLD: Variable = Variable::Slot(Slot(3));
 
 //-----------------------------------------------------------------------------
 
-/** Beetle's address space is unified, so we always use the same `AliasMask`. */
-const AM_MEMORY: code::AliasMask = code::AliasMask(0x1);
+mod builder;
+use builder::{build, Builder};
 
-/** Beetle's registers are not in Beetle's memory, so we use a different `AliasMask`. */
-const AM_REGISTER: code::AliasMask = code::AliasMask(0x2);
-
-/** Build a case, in the form that `Beetle::get_code()` returns. */
-fn build(
-    callback: impl FnOnce(&mut Builder),
-    state_or_trap: Result<State, Trap>,
-) -> Case<Result<State, Trap>> {
-    let mut b = Builder::new();
-    callback(&mut b);
-    Case {actions: b.0, new_state: state_or_trap}
-}
-
-/**
- * A utility for generating action routines.
- *
- * The methods correspond roughly to the cases of type Action. They fill in
- * Beetle-specific default parameters. `load()` and `store()` add code to map
- * Beetle addresses to native addresses. `push()` and `pop()` access Beetle
- * stacks (the native stack is not used).
- */
-struct Builder(Vec<Action>);
-
-impl Builder {
-    fn new() -> Self {
-        Builder(Vec::new())
-    }
-
-    fn add_slots(&mut self, num_slots: usize) {
-        assert_eq!(num_slots & 1, 0);
-        for _ in 0..(num_slots >> 1) {
-            self.0.push(Push(None, None));
-        }
-    }
-
-    fn remove_slots(&mut self, num_slots: usize) {
-        assert_eq!(num_slots & 1, 0);
-        self.0.push(DropMany(num_slots >> 1));
-    }
-
-    fn move_(&mut self, dest: impl IntoVariable, src: impl IntoVariable) {
-        if dest.into() != src.into() {
-            self.0.push(Move(dest.into(), src.into()));
-        }
-    }
-
-    fn const_(&mut self, dest: impl IntoVariable, constant: i64) {
-        self.0.push(Constant(P32, TEMP, constant));
-        self.move_(dest, TEMP);
-    }
-
-    fn const64(&mut self, dest: impl IntoVariable, constant: i64) {
-        self.0.push(Constant(P64, TEMP, constant));
-        self.move_(dest, TEMP);
-    }
-
-    /**
-     * Apply 32-bit `op` to `src`, writing `dest`.
-     * `TEMP` is corrupted.
-     */
-    fn unary(&mut self, op: UnaryOp, dest: impl IntoVariable, src: impl IntoVariable) {
-        self.0.push(Unary(op, P32, TEMP, src.into()));
-        self.move_(dest, TEMP);
-    }
-
-    /**
-     * Apply 32-bit `op` to `src1` and `src2`, writing `dest`.
-     * `TEMP` is corrupted.
-     */
-    fn binary(&mut self, op: BinaryOp, dest: impl IntoVariable, src1: impl IntoVariable, src2: impl IntoVariable) {
-        self.0.push(Binary(op, P32, TEMP, src1.into(), src2.into()));
-        self.move_(dest, TEMP);
-    }
-
-    /**
-     * Apply 64-bit `op` to `src1` and `src2`, writing `dest`.
-     * `TEMP` is corrupted.
-     */
-    fn binary64(&mut self, op: BinaryOp, dest: impl IntoVariable, src1: impl IntoVariable, src2: impl IntoVariable) {
-        self.0.push(Binary(op, P64, TEMP, src1.into(), src2.into()));
-        self.move_(dest, TEMP);
-    }
-
-    /**
-     * Apply 32-bit `op` to `src` and `constant`, writing `dest`.
-     * `TEMP` is corrupted.
-     */
-    fn const_binary(&mut self, op: BinaryOp, dest: impl IntoVariable, src: impl IntoVariable, constant: i64) {
-        assert_ne!(src.into(), TEMP.into());
-        self.const_(TEMP, constant);
-        self.binary(op, dest, src, TEMP);
-    }
-
-    /**
-     * Apply 64-bit `op` to `src` and `constant`, writing `dest`.
-     * `TEMP` is corrupted.
-     */
-    fn const_binary64(&mut self, op: BinaryOp, dest: impl IntoVariable, src: impl IntoVariable, constant: i64) {
-        assert_ne!(src.into(), TEMP.into());
-        self.const64(TEMP, constant);
-        self.binary64(op, dest, src, TEMP);
-    }
-
-    /**
-     * Compute the native address corresponding to `addr`.
-     * `TEMP` is corrupted.
-     */
-    fn native_address(&mut self, dest: impl IntoVariable, addr: impl IntoVariable) {
-        self.binary64(Add, dest, MEMORY, addr);
-    }
-
-    /**
-     * Compute the native address corresponding to `addr`, and load 32 bits.
-     * `TEMP` is corrupted.
-     */
-    // TODO: Bounds checking.
-    fn load(&mut self, dest: impl IntoVariable, addr: impl IntoVariable) {
-        self.native_address(TEMP, addr);
-        self.0.push(Load(TEMP, (TEMP.into(), Four), AM_MEMORY));
-        self.move_(dest, TEMP);
-    }
-
-    /**
-     * Compute the native address corresponding to `addr`, and store 32 bits.
-     * `TEMP` is corrupted.
-     */
-    // TODO: Bounds checking.
-    fn store(&mut self, src: impl IntoVariable, addr: impl IntoVariable) {
-        assert_ne!(src.into(), TEMP.into());
-        self.native_address(TEMP, addr);
-        self.0.push(Store(TEMP, src.into(), (TEMP.into(), Four), AM_MEMORY));
-    }
-
-    /**
-     * Compute the native address corresponding to `addr`, and load 8 bits.
-     * `TEMP` is corrupted.
-     */
-    // TODO: Bounds checking.
-    fn load_byte(&mut self, dest: impl IntoVariable, addr: impl IntoVariable) {
-        self.native_address(TEMP, addr);
-        self.0.push(Load(TEMP, (TEMP.into(), One), AM_MEMORY));
-        self.move_(dest, TEMP);
-    }
-
-    /**
-     * Compute the native address corresponding to `addr`, and store 8 bits.
-     * `TEMP` is corrupted.
-     */
-    // TODO: Bounds checking.
-    fn store_byte(&mut self, src: impl IntoVariable, addr: impl IntoVariable) {
-        assert_ne!(src.into(), TEMP.into());
-        self.native_address(TEMP, addr);
-        self.0.push(Store(TEMP, src.into(), (TEMP.into(), One), AM_MEMORY));
-    }
-
-    /**
-     * Load 32 bits from host address `Global(0) + offset`.
-     * `TEMP` is corrupted.
-     */
-    fn load_register(&mut self, dest: impl IntoVariable, offset: usize) {
-        self.const_binary64(Add, TEMP, Global(0), offset as i64);
-        self.0.push(Load(TEMP, (TEMP.into(), Four), AM_REGISTER));
-        self.move_(dest, TEMP);
-    }
-
-    /**
-     * Load 64 bits from host address `Global(0) + offset`.
-     * `TEMP` is corrupted.
-     */
-    fn load_register64(&mut self, dest: impl IntoVariable, offset: usize) {
-        self.const_binary64(Add, TEMP, Global(0), offset as i64);
-        self.0.push(Load(TEMP, (TEMP.into(), Eight), AM_REGISTER));
-        self.move_(dest, TEMP);
-    }
-
-    /**
-     * Store 32 bits to host address `Global(0) + offset`.
-     * `TEMP` is corrupted.
-     */
-    fn store_register(&mut self, src: impl IntoVariable, offset: usize) {
-        self.const_binary64(Add, TEMP, Global(0), offset as i64);
-        self.0.push(Store(TEMP, src.into(), (TEMP.into(), Four), AM_REGISTER));
-    }
-
-    /**
-     * Store 64 bits to host address `Global(0) + offset`.
-     * `TEMP` is corrupted.
-     */
-    fn store_register64(&mut self, src: impl IntoVariable, offset: usize) {
-        self.const_binary64(Add, TEMP, Global(0), offset as i64);
-        self.0.push(Store(TEMP, src.into(), (TEMP.into(), Eight), AM_REGISTER));
-    }
-
-    /**
-     * `load()` `dest` from `addr`, then increment `addr`.
-     * `TEMP` is corrupted.
-     */
-    fn pop(&mut self, dest: impl IntoVariable, addr: impl IntoVariable) {
-        assert_ne!(dest.into(), addr.into());
-        assert_ne!(dest.into(), TEMP.into());
-        self.load(dest, addr);
-        self.const_binary(Add, TEMP, addr, cell_bytes(1));
-        self.move_(addr, TEMP);
-    }
-
-    /**
-     * Decrement `addr` by `cell_bytes(1)`, then `store()` `src` at `addr`.
-     * `TEMP` is corrupted.
-     */
-    fn push(&mut self, src: impl IntoVariable, addr: impl IntoVariable) {
-        assert_ne!(src.into(), TEMP.into());
-        assert_ne!(src.into(), addr.into());
-        self.const_binary(Sub, TEMP, addr, cell_bytes(1));
-        self.move_(addr, TEMP);
-        self.store(src, TEMP);
-    }
-
-    #[allow(dead_code)]
-    fn debug(&mut self, x: impl IntoVariable) {
-        self.0.push(Debug(x.into()));
-    }
-
-    /** Returns all the [`Action`]s that this `Builder` has accumulated. */
-    fn finish(self) -> Box<[Action]> {
-        self.0.into()
-    }
-}
-
-//-----------------------------------------------------------------------------
-
-/** Returns an [`Action`] that computes the address of `field`. */
+/** Returns the offset of `$field`. */
 macro_rules! private_register {
     ($field: ident) => {
         offset_of!(AllRegisters, $field)
     }
 }
 
-/** Returns an [`Action`] that computes the address of `field`. */
+/** Returns the offset of `$field`. */
 macro_rules! public_register {
     ($field: ident) => {
         offset_of!(AllRegisters, public) + offset_of!(Registers, $field)
