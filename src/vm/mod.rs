@@ -3,7 +3,7 @@ use mijit::target::{Target, Word};
 use mijit::{jit};
 use mijit::code::{Global};
 
-/** Beetle's registers that are live in [`State::Root`]. */
+/** Beetle's registers. */
 #[repr(C)]
 #[derive(Default)]
 pub struct Registers {
@@ -18,7 +18,11 @@ pub struct Registers {
     pub not_address: u32,
 }
 
-/** Beetle's registers, including those live in all [`State`]s. */
+/**
+ * Beetle's registers, including those live in all [`State`]s.
+ *
+ * [State]: mijit::code::Machine::State
+ */
 #[repr(C)]
 #[derive(Default)]
 struct AllRegisters {
