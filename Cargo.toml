@@ -1,0 +1,10 @@
+[package]
+name = "beetle-mijit"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+mijit = "0.1.1"
+memoffset = "0.6"
