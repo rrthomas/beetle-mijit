@@ -68,6 +68,7 @@ pub enum State {
 pub enum Trap {
     Halt,
     NotImplemented,
+    Extra,
 }
 
 //-----------------------------------------------------------------------------
@@ -975,7 +976,7 @@ impl code::Machine for Machine {
                     // HALT
                     build(|_| {}, Err(Trap::Halt)),
                 ]),
-                build(|_| {}, Err(Trap::Halt)),
+                build(|_| {}, Err(Trap::Extra)),
             ),
         }
     }
