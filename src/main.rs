@@ -109,6 +109,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut vm = VM::new(
         mijit::target::native(),
+        std::env::args().collect(),
         MEMORY_CELLS,
         DATA_CELLS,
         RETURN_CELLS,

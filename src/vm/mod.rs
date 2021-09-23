@@ -1,4 +1,4 @@
-use std::convert::{TryFrom};
+use std::convert::{TryFrom, TryInto};
 use mijit::target::{Target, Word};
 use mijit::{jit};
 use mijit::code::{Global};
@@ -101,6 +101,8 @@ pub const RETURN_CELLS: u32 = 1 << 18;
 pub struct VM<T: Target> {
     /** The compiled code, registers, and other compiler state. */
     jit: jit::Jit<Machine, T>,
+    /** The command-line arguments passed to Beetle. */
+    args: Box<[String]>,
     /** The Beetle state (other than the memory). */
     state: AllRegisters,
     /** The Beetle memory. */
@@ -122,12 +124,14 @@ impl<T: Target> VM<T> {
      */
     pub fn new(
         target: T,
+        args: Box<[String]>,
         memory_cells: u32,
         data_cells: u32,
         return_cells: u32,
     ) -> Self {
         let mut vm = VM {
             jit: jit::Jit::new(&Machine, target),
+            args: args,
             state: AllRegisters::default(),
             memory: vec![0; memory_cells as usize],
             free_cells: memory_cells,
@@ -195,6 +199,23 @@ impl<T: Target> VM<T> {
         self.memory[(addr >> 2) as usize] = value;
     }
 
+    /** Return the value of the byte at address `addr`. */
+    pub fn load_byte(&self, addr: u32) -> u8 {
+        let word = self.memory[(addr >> 2) as usize];
+        let which_byte = (addr & 3) as usize;
+        (word >> (8 * which_byte)) as u8
+    }
+
+    /** Set the byte at address `addr` to `value`. */
+    pub fn store_byte(&mut self, addr: u32, value: u8) {
+        let word = self.memory[(addr >> 2) as usize];
+        let which_byte = (addr & 3) as usize;
+        let byte_mask = 0xFFu32 << (8 * which_byte);
+        let new_word = (word & !byte_mask) | ((value as u32) << (8 * which_byte));
+        self.memory[(addr >> 2) as usize] = new_word;
+    }
+
+
     /** Push `item` onto the data stack. */
     pub fn push(&mut self, item: u32) {
         self.registers_mut().sp -= cell_bytes(1) as u32;
@@ -224,6 +245,31 @@ impl<T: Target> VM<T> {
     /** Runs extra instruction `extra`. */
     pub fn extra(&mut self, extra: u8) -> Result<(), BeetleExit> {
         match extra {
+            0x80 => { // ARGC.
+                self.push(self.args.len() as u32);
+                Ok(())
+            },
+            0x81 => { // ARGLEN.
+                let narg = self.pop() as usize;
+                let arg_len = if narg > self.args.len() {
+                    0
+                } else {
+                    self.args[narg].len().try_into().expect("Argument is too long")
+                };
+                self.push(arg_len);
+                Ok(())
+            },
+            0x82 => { // ARGCOPY.
+                let addr = self.pop();
+                let narg = self.pop() as usize;
+                let arg = self.args[narg].clone();
+                if narg < self.args.len() {
+                    for (i, &b) in arg.as_bytes().iter().enumerate() {
+                        self.store_byte(addr + i as u32, b);
+                    }
+                }
+                Ok(())
+            },
             _ => { Err(BeetleExit::NotImplemented(extra)) },
         }
     }
