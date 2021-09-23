@@ -9,6 +9,7 @@ use mijit::code::{Global};
 pub struct Registers {
     pub ep: u32,
     pub a: u32,
+    pub memory: u32,
     pub sp: u32,
     pub rp: u32,
     pub s0: u32,
@@ -27,7 +28,7 @@ pub struct Registers {
 #[derive(Default)]
 struct AllRegisters {
     public: Registers,
-    memory: u64,
+    m0: u64,
     opcode: u32,
     stack0: u32,
     stack1: u32,
@@ -88,6 +89,10 @@ impl<T: Target> VM<T> {
             free_cells: memory_cells,
             halt_addr: 0,
         };
+        // Set memory size register.
+        vm.registers_mut().memory = u32::try_from(
+            cell_bytes(i64::from(memory_cells))
+        ).expect("Address out of range");
         // Allocate the data stack.
         let sp = vm.allocate(data_cells).1;
         vm.registers_mut().s0 = sp;
@@ -182,7 +187,7 @@ impl<T: Target> VM<T> {
     pub unsafe fn run(mut self, ep: u32) -> Self {
         assert!(Self::is_aligned(ep));
         self.registers_mut().ep = ep;
-        self.state.memory = self.memory.as_mut_ptr() as u64;
+        self.state.m0 = self.memory.as_mut_ptr() as u64;
         *self.jit.global_mut(Global(0)) = Word {mp: (&mut self.state as *mut AllRegisters).cast()};
         let (jit, trap) = self.jit.execute(&State::Root).expect("Execute failed");
         assert_eq!(trap, Trap::Halt);

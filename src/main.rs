@@ -114,7 +114,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         RETURN_CELLS,
     );
     load_object(&mut vm, &std::fs::read(opts.object_file)?)?;
-    println!("{:x?}", vm.load(0));
     unsafe { vm.run(0) };
 
     Ok(())

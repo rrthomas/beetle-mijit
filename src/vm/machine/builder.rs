@@ -7,7 +7,7 @@ use Precision::*;
 use BinaryOp::*;
 use Width::*;
 use Action::*;
-use super::{State, Trap, TEMP, MEMORY, cell_bytes};
+use super::{State, Trap, TEMP, M0, cell_bytes};
 
 /**
  * Beetle's address space is unified, so we always use the same `AliasMask`.
@@ -124,7 +124,7 @@ impl Builder {
      * `TEMP` is corrupted.
      */
     pub fn native_address(&mut self, dest: impl IntoVariable, addr: impl IntoVariable) {
-        self.binary64(Add, dest, MEMORY, addr);
+        self.binary64(Add, dest, M0, addr);
     }
 
     /**
