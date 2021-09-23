@@ -247,6 +247,20 @@ impl<T: Target> VM<T> {
         item
     }
 
+    /**
+     * Checks that the interval `start..(start+length)` fits in Beetle's memory,
+     * and returns a native pointer to it.
+     */
+    pub fn native_address_of_range(&mut self, start: u32, length: u32) -> Option<*mut libc::c_void> {
+        start.checked_add(length).and_then(|end| {
+            if ((end >> 2) as usize) < self.memory.len() {
+                Some((self.state.m0 + (start as u64)) as *mut libc::c_void)
+            } else {
+                None
+            }
+        })
+    }
+
     /** Runs extra instruction `extra`. */
     pub fn extra(&mut self, extra: u8) -> Result<(), BeetleExit> {
         match extra {
@@ -332,17 +346,27 @@ impl<T: Target> VM<T> {
                 let nbytes = self.pop();
                 let buf = self.pop();
                 let mut result: isize = 0;
-                let mut exception: i32 = -1;
-                if let Some(end) = buf.checked_add(nbytes) {
-                    if ((end >> 2) as usize) < self.memory.len() {
-                        let native_address = (self.state.m0 + (buf as u64)) as *mut libc::c_void;
-                        // FIXME: `pre_dma()` and `post_dma()`.
-                        result = unsafe {libc::read(fd, native_address, nbytes as usize)};
-                        exception = 0;
-                    }
+                let mut exception = true;
+                if let Some(native_buf) = self.native_address_of_range(buf, nbytes) {
+                    // FIXME: `pre_dma()` and `post_dma()`.
+                    result = unsafe {libc::read(fd, native_buf, nbytes as usize)};
+                    exception &= result < 0;
                 }
-                self.push(result as u32);
-                self.push(exception as u32);
+                self.push(result.try_into().unwrap());
+                self.push(if exception { !0 } else { 0 });
+                Ok(())
+            },
+            0x89 => { // WRITE_FILE.
+                let fd = self.pop() as c_int;
+                let nbytes = self.pop();
+                let buf = self.pop();
+                let mut exception = true;
+                if let Some(native_buf) = self.native_address_of_range(buf, nbytes) {
+                    // FIXME: `pre_dma()` and `post_dma()`.
+                    let result = unsafe {libc::write(fd, native_buf, nbytes as usize)};
+                    exception &= result < 0;
+                }
+                self.push(if exception { !0 } else { 0 });
                 Ok(())
             },
             _ => {
