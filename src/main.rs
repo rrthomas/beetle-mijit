@@ -2,7 +2,7 @@ use clap::{AppSettings, Clap, crate_version, crate_authors};
 use mijit::{target::Target};
 
 mod vm;
-pub use vm::{VM, Registers, MEMORY_CELLS, DATA_CELLS, RETURN_CELLS, cell_bytes};
+pub use vm::{VM, BeetleExit, Registers, MEMORY_CELLS, DATA_CELLS, RETURN_CELLS, cell_bytes};
 
 #[derive(Clap)]
 #[clap(version = crate_version!(), author = crate_authors!())]
@@ -114,7 +114,18 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         RETURN_CELLS,
     );
     load_object(&mut vm, &std::fs::read(opts.object_file)?)?;
-    unsafe { vm.run(0) };
-
-    Ok(())
+    let (new_vm, exit) = unsafe { vm.run(0) };
+    let vm = new_vm;
+    match exit {
+        BeetleExit::Halt => {
+            Ok(())
+        },
+        BeetleExit::NotImplemented(opcode) => {
+            println!("{:#?}", vm);
+            panic!("Opcode {:#x} is not implemented", opcode);
+        },
+        BeetleExit::Error(error) => {
+            Err(error.into())
+        },
+    }
 }

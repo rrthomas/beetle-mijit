@@ -19,6 +19,23 @@ pub struct Registers {
     pub not_address: u32,
 }
 
+impl std::fmt::Debug for Registers {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        f.debug_struct("Registers")
+            .field("ep", &format!("{:#x}", self.ep))
+            .field("a", &format!("{:#x}", self.a))
+            .field("memory", &format!("{:#x}", self.memory))
+            .field("sp", &format!("{:#x}", self.sp))
+            .field("rp", &format!("{:#x}", self.rp))
+            .field("s0", &format!("{:#x}", self.s0))
+            .field("r0", &format!("{:#x}", self.r0))
+            .field("throw", &format!("{:#x}", self.throw))
+            .field("bad", &format!("{:#x}", self.bad))
+            .field("not_address", &format!("{:#x}", self.not_address))
+            .finish()
+    }
+}
+
 /**
  * Beetle's registers, including those live in all [`State`]s.
  *
@@ -36,6 +53,20 @@ struct AllRegisters {
     loop_old: u32,
 }
 
+impl std::fmt::Debug for AllRegisters {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        f.debug_struct("AllRegisters")
+            .field("public", &self.public)
+            .field("m0", &format!("{:#x}", self.m0))
+            .field("opcode", &format!("{:#x}", self.opcode))
+            .field("stack0", &format!("{:#x}", self.stack0))
+            .field("stack1", &format!("{:#x}", self.stack1))
+            .field("loop_new", &format!("{:#x}", self.loop_new))
+            .field("loop_old", &format!("{:#x}", self.loop_old))
+            .finish()
+    }
+}
+
 //-----------------------------------------------------------------------------
 
 /** Computes the number of bytes in `n` cells. */
@@ -44,6 +75,19 @@ pub const fn cell_bytes(n: i64) -> i64 { 4 * n }
 mod machine;
 pub use machine::{Machine};
 use machine::{State, Trap};
+
+//-----------------------------------------------------------------------------
+
+/** The return type of `VM::run()`. */
+pub enum BeetleExit {
+    Halt,
+    NotImplemented(u8),
+    Error(std::io::Error),
+}
+
+impl From<std::io::Error> for BeetleExit {
+    fn from(e: std::io::Error) -> Self { BeetleExit::Error(e) }
+}
 
 //-----------------------------------------------------------------------------
 
@@ -177,6 +221,13 @@ impl<T: Target> VM<T> {
         item
     }
 
+    /** Runs extra instruction `extra`. */
+    pub fn extra(&mut self, extra: u8) -> Result<(), BeetleExit> {
+        match extra {
+            _ => { Err(BeetleExit::NotImplemented(extra)) },
+        }
+    }
+
     /**
      * Run the code at address `ep`.
      *
@@ -184,20 +235,41 @@ impl<T: Target> VM<T> {
      *
      * This will crash if the code is compiled for the wrong [`Target`].
      */
-    pub unsafe fn run(mut self, ep: u32) -> Self {
+    pub unsafe fn run(mut self, ep: u32) -> (Self, BeetleExit) {
         assert!(Self::is_aligned(ep));
         self.registers_mut().ep = ep;
         self.state.m0 = self.memory.as_mut_ptr() as u64;
         *self.jit.global_mut(Global(0)) = Word {mp: (&mut self.state as *mut AllRegisters).cast()};
-        let (jit, trap) = self.jit.execute(&State::Root).expect("Execute failed");
-        assert_eq!(trap, Trap::Halt);
-        self.jit = jit;
-        self
+        loop {
+            let (jit, trap) = self.jit.execute(&State::Root).expect("Execute failed");
+            self.jit = jit;
+            let opcode = self.state.opcode as u8;
+            match trap {
+                Trap::Halt => {
+                    return (self, BeetleExit::Halt);
+                },
+                Trap::NotImplemented => {
+                    return (self, BeetleExit::NotImplemented(opcode as u8));
+                },
+                Trap::Extra => {
+                    if let Err(error) = self.extra(opcode as u8) {
+                        return (self, error);
+                    }
+                },
+            }
+        }
+        
     }
 
     /** Indicate whether an address is cell-aligned. */
     pub fn is_aligned(addr: u32) -> bool {
         addr & 0x3 == 0
+    }
+}
+
+impl<T: Target> std::fmt::Debug for VM<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        self.state.fmt(f)
     }
 }
 
