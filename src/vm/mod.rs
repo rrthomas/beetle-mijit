@@ -334,7 +334,7 @@ impl<T: Target> VM<T> {
                 let mut result: isize = 0;
                 let mut exception: i32 = -1;
                 if let Some(end) = buf.checked_add(nbytes) {
-                    if (end as usize) < self.memory.len() {
+                    if ((end >> 2) as usize) < self.memory.len() {
                         let native_address = (self.state.m0 + (buf as u64)) as *mut libc::c_void;
                         // FIXME: `pre_dma()` and `post_dma()`.
                         result = unsafe {libc::read(fd, native_address, nbytes as usize)};
