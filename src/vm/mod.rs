@@ -1,4 +1,5 @@
 use std::convert::{TryFrom, TryInto};
+use libc::{c_int};
 use mijit::target::{Target, Word};
 use mijit::{jit};
 use mijit::code::{Global};
@@ -215,6 +216,10 @@ impl<T: Target> VM<T> {
         self.memory[(addr >> 2) as usize] = new_word;
     }
 
+    /** Returns a copy of `len` bytes starting at `addr`. */
+    pub fn get_str(&self, addr: u32, len: u32) -> Vec<u8> {
+        (0..len).map(|i| self.load_byte(addr + i)).collect()
+    }
 
     /** Push `item` onto the data stack. */
     pub fn push(&mut self, item: u32) {
@@ -270,7 +275,79 @@ impl<T: Target> VM<T> {
                 }
                 Ok(())
             },
-            _ => { Err(BeetleExit::NotImplemented(extra)) },
+            0x83 => { // STDIN.
+                self.push(libc::STDIN_FILENO as u32);
+                Ok(())
+            },
+            0x84 => { // STDOUT.
+                self.push(libc::STDIN_FILENO as u32);
+                Ok(())
+            },
+            0x85 => { // STDERR.
+                self.push(libc::STDIN_FILENO as u32);
+                Ok(())
+            },
+            0x86 => { // OPEN_FILE.
+                let perm = self.pop();
+                let len = self.pop();
+                let str_ = self.pop();
+                // Decode `perm` into `flags` and `binary`.
+                let mut flags = [
+                    libc::O_RDONLY,
+                    libc::O_WRONLY,
+                    libc::O_RDWR,
+                    0,
+                ][(perm & 3) as usize];
+                if perm & 4 != 0 {
+                    flags |= libc::O_CREAT | libc::O_TRUNC;
+                }
+                let binary = perm & 8 != 0;
+                // Open the file.
+                let filename = self.get_str(str_, len);
+                let fd = unsafe {libc::open(
+                    filename.as_ptr() as *const libc::c_char,
+                    flags,
+                    libc::S_IRUSR | libc::S_IWUSR | libc::S_IRGRP | libc::S_IWGRP | libc::S_IROTH | libc::S_IWOTH,
+                )};
+                let result: c_int = if fd < 0 {
+                    fd
+                } else if binary {
+                    // FIXME: Don't know how to open in binary mode.
+                    // For now, assume it is already binary.
+                    0
+                } else {
+                    -1
+                };
+                self.push(fd as u32);
+                self.push(result as u32);
+                Ok(())
+            },
+            0x87 => { // CLOSE_FILE.
+                let fd = self.pop() as c_int;
+                self.push(unsafe {libc::close(fd)} as u32);
+                Ok(())
+            },
+            0x88 => { // READ_FILE.
+                let fd = self.pop() as c_int;
+                let nbytes = self.pop();
+                let buf = self.pop();
+                let mut result: isize = 0;
+                let mut exception: i32 = -1;
+                if let Some(end) = buf.checked_add(nbytes) {
+                    if (end as usize) < self.memory.len() {
+                        let native_address = (self.state.m0 + (buf as u64)) as *mut libc::c_void;
+                        // FIXME: `pre_dma()` and `post_dma()`.
+                        result = unsafe {libc::read(fd, native_address, nbytes as usize)};
+                        exception = 0;
+                    }
+                }
+                self.push(result as u32);
+                self.push(exception as u32);
+                Ok(())
+            },
+            _ => {
+                Err(BeetleExit::NotImplemented(extra))
+            },
         }
     }
 
