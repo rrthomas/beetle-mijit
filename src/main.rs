@@ -1,16 +1,8 @@
 use clap::{AppSettings, Clap, crate_version, crate_authors};
 use mijit::{target::Target};
 
-mod vm;
-pub use vm::{VM, BeetleExit, Registers, MEMORY_CELLS, DATA_CELLS, RETURN_CELLS, cell_bytes};
-
-#[derive(Clap)]
-#[clap(version = crate_version!(), author = crate_authors!())]
-#[clap(setting = AppSettings::ColoredHelp)]
-struct Opts {
-    /// Object file to load and run.
-    object_file: String,
-}
+pub mod vm;
+use vm::{VM, BeetleExit, DATA_CELLS, RETURN_CELLS, cell_bytes};
 
 #[derive(Debug)]
 enum LoadObjectError {
@@ -104,13 +96,33 @@ fn load_object<T: Target>(vm: &mut VM<T>, bytes: &[u8]) -> Result<u32, LoadObjec
     return Ok(cell_bytes(length) as u32);
 }
 
+//-----------------------------------------------------------------------------
+
+#[derive(Debug, Clap)]
+#[clap(version = crate_version!(), author = crate_authors!())]
+#[clap(setting = AppSettings::ColoredHelp)]
+struct Opts {
+    /** Set memory size to the given NUMBER of cells. 0 < NUMBER <= 1073741824. */
+    #[clap(short, long, value_name="NUMBER", default_value="1048576")]
+    memory_cells: u32,
+    /*
+    /** Enter debugger on exception. */
+    #[clap(short, long)]
+    debug: bool,
+    */
+    /** Object file to load and run. */
+    object_file: String,
+    /** Arguments. */
+    args: Vec<String>,
+}
+
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts: Opts = Opts::parse();
-
+    println!("{:?}", opts);
     let mut vm = VM::new(
         mijit::target::native(),
-        std::env::args().collect(),
-        MEMORY_CELLS,
+        opts.args.into(),
+        opts.memory_cells,
         DATA_CELLS,
         RETURN_CELLS,
     );
