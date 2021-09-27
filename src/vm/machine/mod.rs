@@ -68,6 +68,7 @@ pub enum State {
 pub enum Trap {
     Halt,
     NotImplemented,
+    Lib,
     Extra,
 }
 
@@ -750,84 +751,25 @@ impl code::Machine for Machine {
                         b.store(R3, R2);
                     }, Ok(State::Root)),
 
-                    // BSP@
+                    // SP@
                     build(|b| {
                         b.move_(R1, BSP);
                         b.push(R1, BSP);
                     }, Ok(State::Root)),
 
-                    // BSP!
+                    // SP!
                     build(|b| {
                         b.load(BSP, BSP);
                     }, Ok(State::Root)),
 
-                    // BRP@
+                    // RP@
                     build(|b| {
                         b.push(BRP, BSP);
                     }, Ok(State::Root)),
 
-                    // BRP!
+                    // RP!
                     build(|b| {
                         b.pop(BRP, BSP);
-                    }, Ok(State::Root)),
-
-                    // EP@
-                    build(|b| {
-                        b.push(BEP, BSP);
-                    }, Ok(State::Root)),
-
-                    // BS0@
-                    build(|b| {
-                        b.load_register(R1, public_register!(s0));
-                        b.push(R1, BSP);
-                    }, Ok(State::Root)),
-
-                    // BS0!
-                    build(|b| {
-                        b.pop(R1, BSP);
-                        b.store_register(R1, public_register!(s0));
-                    }, Ok(State::Root)),
-
-                    // BR0@
-                    build(|b| {
-                        b.load_register(R1, public_register!(r0));
-                        b.push(R1, BSP);
-                    }, Ok(State::Root)),
-
-                    // BR0!
-                    build(|b| {
-                        b.pop(R1, BSP);
-                        b.store_register(R1, public_register!(r0));
-                    }, Ok(State::Root)),
-
-                    // 'THROW@
-                    build(|b| {
-                        b.load_register(R1, public_register!(throw));
-                        b.push(R1, BSP);
-                    }, Ok(State::Root)),
-
-                    // 'THROW!
-                    build(|b| {
-                        b.pop(R1, BSP);
-                        b.store_register(R1, public_register!(throw));
-                    }, Ok(State::Root)),
-
-                    // MEMORY@
-                    build(|b| {
-                        b.load_register(R1, public_register!(memory));
-                        b.push(R1, BSP);
-                    }, Ok(State::Root)),
-
-                    // 'BAD@
-                    build(|b| {
-                        b.load_register(R1, public_register!(bad));
-                        b.push(R1, BSP);
-                    }, Ok(State::Root)),
-
-                    // -ADDRESS@
-                    build(|b| {
-                        b.load_register(R1, public_register!(not_address));
-                        b.push(R1, BSP);
                     }, Ok(State::Root)),
 
                     // BRANCH
@@ -975,6 +917,78 @@ impl code::Machine for Machine {
 
                     // HALT
                     build(|_| {}, Err(Trap::Halt)),
+
+                    // EP@
+                    build(|b| {
+                        b.push(BEP, BSP);
+                    }, Ok(State::Root)),
+
+                    // LIB
+                    build(|_| {}, Err(Trap::Lib)),
+
+                    // UNDEFINED
+                    build(|_| {
+                        // TODO
+                    }, Err(Trap::NotImplemented)),
+
+                    // LINK
+                    build(|_| {
+                        // TODO
+                    }, Err(Trap::NotImplemented)),
+
+                    // S0@
+                    build(|b| {
+                        b.load_register(R1, public_register!(s0));
+                        b.push(R1, BSP);
+                    }, Ok(State::Root)),
+
+                    // S0!
+                    build(|b| {
+                        b.pop(R1, BSP);
+                        b.store_register(R1, public_register!(s0));
+                    }, Ok(State::Root)),
+
+                    // R0@
+                    build(|b| {
+                        b.load_register(R1, public_register!(r0));
+                        b.push(R1, BSP);
+                    }, Ok(State::Root)),
+
+                    // R0!
+                    build(|b| {
+                        b.pop(R1, BSP);
+                        b.store_register(R1, public_register!(r0));
+                    }, Ok(State::Root)),
+
+                    // 'THROW@
+                    build(|b| {
+                        b.load_register(R1, public_register!(throw));
+                        b.push(R1, BSP);
+                    }, Ok(State::Root)),
+
+                    // 'THROW!
+                    build(|b| {
+                        b.pop(R1, BSP);
+                        b.store_register(R1, public_register!(throw));
+                    }, Ok(State::Root)),
+
+                    // MEMORY@
+                    build(|b| {
+                        b.load_register(R1, public_register!(memory));
+                        b.push(R1, BSP);
+                    }, Ok(State::Root)),
+
+                    // 'BAD@
+                    build(|b| {
+                        b.load_register(R1, public_register!(bad));
+                        b.push(R1, BSP);
+                    }, Ok(State::Root)),
+
+                    // -ADDRESS@
+                    build(|b| {
+                        b.load_register(R1, public_register!(not_address));
+                        b.push(R1, BSP);
+                    }, Ok(State::Root)),
                 ]),
                 build(|_| {}, Err(Trap::Extra)),
             ),

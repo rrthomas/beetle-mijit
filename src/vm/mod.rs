@@ -83,6 +83,7 @@ use machine::{State, Trap};
 pub enum BeetleExit {
     Halt,
     NotImplemented(u8),
+    InvalidLibRoutine(u32),
     Error(std::io::Error),
 }
 
@@ -261,47 +262,10 @@ impl<T: Target> VM<T> {
         })
     }
 
-    /** Runs extra instruction `extra`. */
-    pub fn extra(&mut self, extra: u8) -> Result<(), BeetleExit> {
-        match extra {
-            0x80 => { // ARGC.
-                self.push(self.args.len() as u32);
-                Ok(())
-            },
-            0x81 => { // ARGLEN.
-                let narg = self.pop() as usize;
-                let arg_len = if narg > self.args.len() {
-                    0
-                } else {
-                    self.args[narg].len().try_into().expect("Argument is too long")
-                };
-                self.push(arg_len);
-                Ok(())
-            },
-            0x82 => { // ARGCOPY.
-                let addr = self.pop();
-                let narg = self.pop() as usize;
-                let arg = self.args[narg].clone();
-                if narg < self.args.len() {
-                    for (i, &b) in arg.as_bytes().iter().enumerate() {
-                        self.store_byte(addr + i as u32, b);
-                    }
-                }
-                Ok(())
-            },
-            0x83 => { // STDIN.
-                self.push(libc::STDIN_FILENO as u32);
-                Ok(())
-            },
-            0x84 => { // STDOUT.
-                self.push(libc::STDIN_FILENO as u32);
-                Ok(())
-            },
-            0x85 => { // STDERR.
-                self.push(libc::STDIN_FILENO as u32);
-                Ok(())
-            },
-            0x86 => { // OPEN_FILE.
+    /** Runs LIB routine `routine`. */
+    pub fn lib(&mut self, routine: u32) -> Result<(), BeetleExit> {
+        match routine {
+            4 => { // OPEN_FILE.
                 let perm = self.pop();
                 let len = self.pop();
                 let str_ = self.pop();
@@ -336,12 +300,12 @@ impl<T: Target> VM<T> {
                 self.push(result as u32);
                 Ok(())
             },
-            0x87 => { // CLOSE_FILE.
+            5 => { // CLOSE_FILE.
                 let fd = self.pop() as c_int;
                 self.push(unsafe {libc::close(fd)} as u32);
                 Ok(())
             },
-            0x88 => { // READ_FILE.
+            6 => { // READ_FILE.
                 let fd = self.pop() as c_int;
                 let nbytes = self.pop();
                 let buf = self.pop();
@@ -356,7 +320,7 @@ impl<T: Target> VM<T> {
                 self.push(if exception { !0 } else { 0 });
                 Ok(())
             },
-            0x89 => { // WRITE_FILE.
+            7 => { // WRITE_FILE.
                 let fd = self.pop() as c_int;
                 let nbytes = self.pop();
                 let buf = self.pop();
@@ -369,8 +333,45 @@ impl<T: Target> VM<T> {
                 self.push(if exception { !0 } else { 0 });
                 Ok(())
             },
+            16 => { // ARGC.
+                self.push(self.args.len() as u32);
+                Ok(())
+            },
+            17 => { // ARGLEN.
+                let narg = self.pop() as usize;
+                let arg_len = if narg > self.args.len() {
+                    0
+                } else {
+                    self.args[narg].len().try_into().expect("Argument is too long")
+                };
+                self.push(arg_len);
+                Ok(())
+            },
+            18 => { // ARGCOPY.
+                let addr = self.pop();
+                let narg = self.pop() as usize;
+                let arg = self.args[narg].clone();
+                if narg < self.args.len() {
+                    for (i, &b) in arg.as_bytes().iter().enumerate() {
+                        self.store_byte(addr + i as u32, b);
+                    }
+                }
+                Ok(())
+            },
+            19 => { // STDIN.
+                self.push(libc::STDIN_FILENO as u32);
+                Ok(())
+            },
+            20 => { // STDOUT.
+                self.push(libc::STDIN_FILENO as u32);
+                Ok(())
+            },
+            21 => { // STDERR.
+                self.push(libc::STDIN_FILENO as u32);
+                Ok(())
+            },
             _ => {
-                Err(BeetleExit::NotImplemented(extra))
+                Err(BeetleExit::InvalidLibRoutine(routine))
             },
         }
     }
@@ -398,11 +399,15 @@ impl<T: Target> VM<T> {
                 Trap::NotImplemented => {
                     return (self, BeetleExit::NotImplemented(opcode as u8));
                 },
-                Trap::Extra => {
-                    if let Err(error) = self.extra(opcode as u8) {
+                Trap::Lib => {
+                    let routine = self.pop();
+                    if let Err(error) = self.lib(routine) {
                         return (self, error);
                     }
                 },
+                Trap::Extra => {
+                    return (self, BeetleExit::Halt);
+                }
             }
         }
         
