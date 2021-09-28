@@ -118,7 +118,6 @@ struct Opts {
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts: Opts = Opts::parse();
-    println!("{:?}", opts);
     let mut vm = VM::new(
         mijit::target::native(),
         opts.args.into(),
