@@ -80,6 +80,7 @@ use machine::{State, Trap};
 //-----------------------------------------------------------------------------
 
 /** The return type of `VM::run()`. */
+#[derive(Debug)]
 pub enum BeetleExit {
     Halt,
     NotImplemented(u8),
@@ -153,7 +154,7 @@ impl<T: Target> VM<T> {
         vm.registers_mut().rp = rp;
         // Allocate a word to hold a HALT instruction.
         vm.halt_addr = vm.allocate(1).0;
-        vm.store(vm.halt_addr, 0x5F);
+        vm.store(vm.halt_addr, 0x55);
         vm
     }
 
@@ -473,30 +474,34 @@ pub mod tests {
 
         // Beetle object code:
         vec![
-            0x00001504, 0x0000024F, 0x00002108, 0x0000084D,
-            0x00001501, 0x0000034F, 0x001A2202, 0xFFFFF853,
-            0x0000034D, 0x22062204, 0xFFFFF553, 0xFFFFF453,
-            0x00000054,
+            0x00001504, 0x00000245, 0x00002108, 0x00000843,
+            0x00001501, 0x00000345, 0x001A2202, 0xFFFFF849,
+            0x00000343, 0x22062204, 0xFFFFF549, 0xFFFFF449,
+            0x0000004A,
         ]
     }
 
     #[test]
     pub fn halt() {
-        let mut vm = VM::new(native(), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        let mut vm = VM::new(native(), Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
         let entry_address = vm.halt_addr;
-        vm = unsafe { vm.run(entry_address) };
+        let (new_vm, exit) = unsafe { vm.run(entry_address) };
+        vm = new_vm;
+        assert!(matches!(exit, BeetleExit::Halt));
         assert_eq!(vm.registers().s0, vm.registers().sp);
         assert_eq!(vm.registers().r0, vm.registers().rp);
     }
 
     #[test]
     pub fn ackermann() {
-        let mut vm = VM::new(native(), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        let mut vm = VM::new(native(), Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
         vm.load_object(ackermann_object().as_ref());
         vm.push(3);
         vm.push(5);
         vm.rpush(vm.halt_addr);
-        vm = unsafe { vm.run(0) };
+        let (new_vm, exit) = unsafe { vm.run(0) };
+        vm = new_vm;
+        assert!(matches!(exit, BeetleExit::Halt));
         let result = vm.pop();
         assert_eq!(vm.registers().s0, vm.registers().sp);
         assert_eq!(vm.registers().r0, vm.registers().rp);
