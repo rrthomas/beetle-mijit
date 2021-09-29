@@ -335,6 +335,21 @@ impl<T: Target> VM<T> {
                 self.push(if exception { !0 } else { 0 });
                 Ok(())
             },
+            8 => { // FILE-POSITION.
+                let fd = self.pop() as c_int;
+                let result = unsafe {libc::lseek(fd, 0, libc::SEEK_CUR)} as i64;
+                self.push(result as u32);
+                self.push((result >> 32) as u32);
+                self.push(if result < 0 { !0 } else { 0 });
+                Ok(())
+            },
+            9 => { // REPOSITION-FILE.
+                let fd = self.pop() as c_int;
+                let ud = ((self.pop() as u64) << 32) | (self.pop() as u64);
+                let result = unsafe {libc::lseek(fd, ud as libc::off_t, libc::SEEK_SET)};
+                self.push(if result < 0 { !0 } else { 0 });
+                Ok(())
+            },
             16 => { // ARGC.
                 self.push(self.args.len() as u32);
                 Ok(())
