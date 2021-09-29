@@ -290,13 +290,13 @@ impl<T: Target> VM<T> {
                     libc::S_IRUSR | libc::S_IWUSR | libc::S_IRGRP | libc::S_IWGRP | libc::S_IROTH | libc::S_IWOTH,
                 )};
                 let result: c_int = if fd < 0 {
-                    fd
+                    -1
                 } else if binary {
                     // FIXME: Don't know how to open in binary mode.
                     // For now, assume it is already binary.
                     0
                 } else {
-                    -1
+                    0
                 };
                 self.push(fd as u32);
                 self.push(result as u32);
