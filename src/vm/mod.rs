@@ -522,6 +522,33 @@ pub mod tests {
         assert_eq!(result, 253);
     }
 
+    // Test arithmetic instructions.
+
+    fn test_unary(
+        opcode: u8,
+        expected: fn(u32) -> u32,
+    ) {
+        let mut vm = VM::new(native(), Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        vm.registers_mut().throw = vm.halt_addr;
+        vm.store(0, 0x5500 | (opcode as u32));
+        for x in TEST_VALUES {
+            println!("Operating on {:x}", x);
+            vm.push(x);
+            let (new_vm, exit) = unsafe { vm.run(0) };
+            vm = new_vm;
+            assert!(matches!(exit, BeetleExit::Halt));
+            let observed = vm.pop();
+            assert_eq!(observed, expected(x));
+            assert_eq!(vm.registers().s0, vm.registers().sp);
+            assert_eq!(vm.registers().r0, vm.registers().rp);
+        }
+    }
+
+    #[test]
+    fn one_lshift() {
+        test_unary(0x37, |x| x << 1);
+    }
+
     // Test division instructions.
 
     /** Slow but correct division rounding quotient down. */
