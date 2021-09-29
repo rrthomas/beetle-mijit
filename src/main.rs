@@ -118,9 +118,11 @@ struct Opts {
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts: Opts = Opts::parse();
+    let mut argv = vec![opts.object_file.clone()];
+    argv.extend(opts.args);
     let mut vm = VM::new(
         mijit::target::native(),
-        opts.args.into(),
+        argv.into(),
         opts.memory_cells,
         DATA_CELLS,
         RETURN_CELLS,
