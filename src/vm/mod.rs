@@ -237,6 +237,19 @@ impl<T: Target> VM<T> {
         item
     }
 
+    /** Push the low and high words of `item` onto the data stack. */
+    pub fn push_double(&mut self, item: u64) {
+        self.push(item as u32);
+        self.push((item >> 32) as u32);
+    }
+
+    /** Pop the high and low words of an item from the data stack. */
+    pub fn pop_double(&mut self) -> u64 {
+        let high = self.pop() as u64;
+        let low = self.pop() as u64;
+        low | (high << 32)
+    }
+
     /** Push `item` onto the return stack. */
     pub fn rpush(&mut self, item: u32) {
         self.registers_mut().rp -= cell_bytes(1) as u32;
@@ -337,16 +350,15 @@ impl<T: Target> VM<T> {
             },
             8 => { // FILE-POSITION.
                 let fd = self.pop() as c_int;
-                let result = unsafe {libc::lseek(fd, 0, libc::SEEK_CUR)} as i64;
-                self.push(result as u32);
-                self.push((result >> 32) as u32);
+                let result = unsafe {libc::lseek(fd, 0, libc::SEEK_CUR)};
+                self.push_double(result as u64);
                 self.push(if result < 0 { !0 } else { 0 });
                 Ok(())
             },
             9 => { // REPOSITION-FILE.
                 let fd = self.pop() as c_int;
-                let ud = ((self.pop() as u64) << 32) | (self.pop() as u64);
-                let result = unsafe {libc::lseek(fd, ud as libc::off_t, libc::SEEK_SET)};
+                let pos = self.pop_double() as libc::off_t;
+                let result = unsafe {libc::lseek(fd, pos, libc::SEEK_SET)};
                 self.push(if result < 0 { !0 } else { 0 });
                 Ok(())
             },
