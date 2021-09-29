@@ -434,6 +434,19 @@ pub mod tests {
 
     use mijit::target::{native};
 
+    pub const TEST_VALUES: [u32; 10] = [
+        0x00000000,
+        0x00000001,
+        0x11111111,
+        0x01234567,
+        0x7FFFFFFF,
+        0x80000000,
+        0xEEEEEEEE,
+        0xFEDCBA98,
+        0xFFFFFFFE,
+        0xFFFFFFFF,
+    ];
+
     pub fn ackermann_object() -> Vec<u32> {
         // Forth source:
         // : ACKERMANN   ( m n -- result )
@@ -506,6 +519,179 @@ pub mod tests {
         assert_eq!(vm.registers().s0, vm.registers().sp);
         assert_eq!(vm.registers().r0, vm.registers().rp);
         assert_eq!(result, 253);
+    }
+
+    fn floor_div_mod(numerator: i32, denominator: i32) -> (i32, i32) {
+        let quotient = ((numerator as f64) / (denominator as f64)).floor() as i64 as i32;
+        let remainder = numerator.wrapping_sub(quotient.wrapping_mul(denominator));
+        (quotient, remainder)
+    }
+
+    fn trunc_div_mod(numerator: i32, denominator: i32) -> (i32, i32) {
+        let quotient = ((numerator as f64) / (denominator as f64)).trunc() as i64 as i32;
+        let remainder = numerator.wrapping_sub(quotient.wrapping_mul(denominator));
+        (quotient, remainder)
+    }
+
+    #[test]
+    pub fn slash() {
+        let mut vm = VM::new(native(), Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        vm.registers_mut().throw = vm.halt_addr;
+        vm.store(0, 0x5526);
+        for x in TEST_VALUES {
+            for y in TEST_VALUES {
+                println!("slash {:x} {:x}", x, y);
+                vm.push(x);
+                vm.push(y);
+                let (new_vm, exit) = unsafe { vm.run(0) };
+                vm = new_vm;
+                assert!(matches!(exit, BeetleExit::Halt));
+                if y != 0 {
+                    // Division should work.
+                    let quotient = vm.pop();
+                    assert_eq!(vm.registers().s0, vm.registers().sp);
+                    assert_eq!(vm.registers().r0, vm.registers().rp);
+                    let expected = floor_div_mod(x as i32, y as i32);
+                    assert_eq!(quotient, expected.0 as u32);
+                } else {
+                    // Division should throw.
+                    let exception = vm.pop();
+                    assert_eq!(vm.registers().s0, vm.registers().sp);
+                    assert_eq!(vm.registers().r0, vm.registers().rp);
+                    assert_eq!(exception, -10i32 as u32);
+                }
+            }
+        }
+    }
+
+    #[test]
+    pub fn mod_() {
+        let mut vm = VM::new(native(), Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        vm.registers_mut().throw = vm.halt_addr;
+        vm.store(0, 0x5527);
+        for x in TEST_VALUES {
+            for y in TEST_VALUES {
+                println!("mod {:x} {:x}", x, y);
+                vm.push(x);
+                vm.push(y);
+                let (new_vm, exit) = unsafe { vm.run(0) };
+                vm = new_vm;
+                assert!(matches!(exit, BeetleExit::Halt));
+                if y != 0 {
+                    // Division should work.
+                    let remainder = vm.pop();
+                    assert_eq!(vm.registers().s0, vm.registers().sp);
+                    assert_eq!(vm.registers().r0, vm.registers().rp);
+                    let expected = floor_div_mod(x as i32, y as i32);
+                    assert_eq!(remainder, expected.1 as u32);
+                } else {
+                    // Division should throw.
+                    let exception = vm.pop();
+                    assert_eq!(vm.registers().s0, vm.registers().sp);
+                    assert_eq!(vm.registers().r0, vm.registers().rp);
+                    assert_eq!(exception, -10i32 as u32);
+                }
+            }
+        }
+    }
+
+    #[test]
+    pub fn slash_mod() {
+        let mut vm = VM::new(native(), Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        vm.registers_mut().throw = vm.halt_addr;
+        vm.store(0, 0x5528);
+        for x in TEST_VALUES {
+            for y in TEST_VALUES {
+                println!("slash_mod {:x} {:x}", x, y);
+                vm.push(x);
+                vm.push(y);
+                let (new_vm, exit) = unsafe { vm.run(0) };
+                vm = new_vm;
+                assert!(matches!(exit, BeetleExit::Halt));
+                if y != 0 {
+                    // Division should work.
+                    let quotient = vm.pop();
+                    let remainder = vm.pop();
+                    assert_eq!(vm.registers().s0, vm.registers().sp);
+                    assert_eq!(vm.registers().r0, vm.registers().rp);
+                    let expected = floor_div_mod(x as i32, y as i32);
+                    assert_eq!(quotient, expected.0 as u32);
+                    assert_eq!(remainder, expected.1 as u32);
+                } else {
+                    // Division should throw.
+                    let exception = vm.pop();
+                    assert_eq!(vm.registers().s0, vm.registers().sp);
+                    assert_eq!(vm.registers().r0, vm.registers().rp);
+                    assert_eq!(exception, -10i32 as u32);
+                }
+            }
+        }
+    }
+
+    #[test]
+    pub fn u_slash_mod() {
+        let mut vm = VM::new(native(), Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        vm.registers_mut().throw = vm.halt_addr;
+        vm.store(0, 0x5529);
+        for x in TEST_VALUES {
+            for y in TEST_VALUES {
+                println!("u_slash_mod {:x} {:x}", x, y);
+                vm.push(x);
+                vm.push(y);
+                let (new_vm, exit) = unsafe { vm.run(0) };
+                vm = new_vm;
+                assert!(matches!(exit, BeetleExit::Halt));
+                if y != 0 {
+                    // Division should work.
+                    let quotient = vm.pop();
+                    let remainder = vm.pop();
+                    assert_eq!(vm.registers().s0, vm.registers().sp);
+                    assert_eq!(vm.registers().r0, vm.registers().rp);
+                    let expected = (x / y, x % y);
+                    assert_eq!(quotient, expected.0);
+                    assert_eq!(remainder, expected.1);
+                } else {
+                    // Division should throw.
+                    let exception = vm.pop();
+                    assert_eq!(vm.registers().s0, vm.registers().sp);
+                    assert_eq!(vm.registers().r0, vm.registers().rp);
+                    assert_eq!(exception, -10i32 as u32);
+                }
+            }
+        }
+    }
+
+    #[test]
+    pub fn s_slash_rem() {
+        let mut vm = VM::new(native(), Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        vm.registers_mut().throw = vm.halt_addr;
+        vm.store(0, 0x552A);
+        for x in TEST_VALUES {
+            for y in TEST_VALUES {
+                println!("s_slash_rem {:x} {:x}", x, y);
+                vm.push(x);
+                vm.push(y);
+                let (new_vm, exit) = unsafe { vm.run(0) };
+                vm = new_vm;
+                assert!(matches!(exit, BeetleExit::Halt));
+                if y != 0 {
+                    // Division should work.
+                    let quotient = vm.pop();
+                    let remainder = vm.pop();
+                    assert_eq!(vm.registers().s0, vm.registers().sp);
+                    assert_eq!(vm.registers().r0, vm.registers().rp);
+                    let expected = trunc_div_mod(x as i32, y as i32);
+                    assert_eq!(quotient, expected.0 as u32);
+                    assert_eq!(remainder, expected.1 as u32);
+                } else {
+                    // Division should throw.
+                    let exception = vm.pop();
+                    assert_eq!(vm.registers().s0, vm.registers().sp);
+                    assert_eq!(vm.registers().r0, vm.registers().rp);
+                    assert_eq!(exception, -10i32 as u32);
+                }
+            }
+        }
     }
 
     // TODO: Test (LOOP) instructions.

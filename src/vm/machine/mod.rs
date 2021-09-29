@@ -47,9 +47,12 @@ pub enum State {
     Root,
     Dispatch,
     Next,
+    Throw,
     Pick,
     Roll,
     Qdup,
+    DivTest,
+    Divide,
     Lshift,
     Rshift,
     Branch,
@@ -108,9 +111,12 @@ impl code::Machine for Machine {
         live_values.extend(match state {
             State::Root => vec![BA],
             State::Next => vec![],
+            State::Throw => vec![],
             State::Pick => vec![BA, STACK0],
             State::Roll => vec![BA, STACK0],
             State::Qdup => vec![BA, STACK0],
+            State::DivTest => vec![BA, OPCODE, STACK0],
+            State::Divide => vec![BA, OPCODE, STACK0],
             State::Lshift => vec![BA, OPCODE, STACK0, STACK1],
             State::Rshift => vec![BA, OPCODE, STACK0, STACK1],
             State::Branch => vec![],
@@ -177,6 +183,10 @@ impl code::Machine for Machine {
             State::Next => Switch::always(build(|b| {
                 b.pop(BA, BEP);
             }, Ok(State::Root))),
+            State::Throw => Switch::always(build(|b| {
+                b.store_register(BEP, public_register!(bad));
+                b.load_register(BEP, public_register!(throw)); // FIXME: Add check that EP is valid.
+            }, Ok(State::Next))),
             State::Pick => Switch::new(
                 STACK0,
                 (0..4).map(|u| build(|b| {
@@ -207,6 +217,125 @@ impl code::Machine for Machine {
                     b.push(STACK0, BSP);
                 }, Ok(State::Root)),
                 build(|_| {}, Ok(State::Root)),
+            ),
+            State::DivTest => Switch::if_(
+                STACK0, // denominator.
+                build(|b| {
+                    b.const_binary(Sub, OPCODE, OPCODE, 0x26); // FIXME: Symbolic constant.
+                }, Ok(State::Divide)),
+                build(|b| {
+                    b.const_(R4, -10); // Division by zero.
+                    b.store(R4, BSP);
+                }, Ok(State::Throw)),
+            ),
+            State::Divide => Switch::new(
+                OPCODE, // Beetle opcode - 0x26. FIXME: Symbolic constant.
+                Box::new([
+                    // /
+                    build(|b| {
+                        b.load(R4, BSP);
+                        // If denominator (`STACK0`) is negative,
+                        // negate numerator (`R4`) and denominator.
+                        b.const_binary(Asr, R1, STACK0, 31);
+                        b.binary(Xor, R5, R4, R1);
+                        b.binary(Sub, R3, R5, R1);
+                        b.binary(Xor, R2, STACK0, R1);
+                        b.binary(Sub, R2, R2, R1);
+                        // If the numerator is negative, invert it.
+                        // If `R3` is `0x80000000` it can be positive or
+                        // negative depending on whether `R4` was negated.
+                        // So test `R5 < R1`, not `R3 < 0`.
+                        b.binary(Lt, R1, R5, R1);
+                        b.binary(Xor, R3, R3, R1);
+                        // Now both `R3` and `R2` are non-negative. Use `UDiv`.
+                        b.binary(UDiv, R2, R3, R2);
+                        // If the numerator was negative, invert the quotient.
+                        b.binary(Xor, R2, R2, R1);
+                        b.store(R2, BSP);
+                    }, Ok(State::Root)),
+                    // MOD
+                    build(|b| {
+                        b.load(R4, BSP);
+                        // See "/".
+                        b.const_binary(Asr, R1, STACK0, 31);
+                        b.binary(Xor, R5, R4, R1);
+                        b.binary(Sub, R3, R5, R1);
+                        b.binary(Xor, R2, STACK0, R1);
+                        b.binary(Sub, R2, R2, R1);
+                        b.binary(Lt, R1, R5, R1);
+                        b.binary(Xor, R3, R3, R1);
+                        b.binary(UDiv, R2, R3, R2);
+                        b.binary(Xor, R2, R2, R1);
+                        // Compute remainder.
+                        b.binary(Mul, R3, R2, STACK0);
+                        b.binary(Sub, R4, R4, R3);
+                        b.store(R4, BSP);
+                    }, Ok(State::Root)),
+                    // /MOD
+                    build(|b| {
+                        b.load(R4, BSP);
+                        // See "/".
+                        b.const_binary(Asr, R1, STACK0, 31);
+                        b.binary(Xor, R5, R4, R1);
+                        b.binary(Sub, R3, R5, R1);
+                        b.binary(Xor, R2, STACK0, R1);
+                        b.binary(Sub, R2, R2, R1);
+                        b.binary(Lt, R1, R5, R1);
+                        b.binary(Xor, R3, R3, R1);
+                        b.binary(UDiv, R2, R3, R2);
+                        b.binary(Xor, R2, R2, R1);
+                        // Compute remainder.
+                        b.binary(Mul, R3, R2, STACK0);
+                        b.binary(Sub, R4, R4, R3);
+                        b.store(R4, BSP);
+                        b.push(R2, BSP);
+                    }, Ok(State::Root)),
+                    // U/MOD
+                    build(|b| {
+                        b.load(R4, BSP);
+                        b.binary(UDiv, R2, R4, STACK0);
+                        // Compute remainder.
+                        b.binary(Mul, R3, R2, STACK0);
+                        b.binary(Sub, R4, R4, R3);
+                        b.store(R4, BSP);
+                        b.push(R2, BSP);
+                    }, Ok(State::Root)),
+                    // S/REM
+                    build(|b| {
+                        b.load(R4, BSP);
+                        // Cannot use Mijit's `SDiv` because of the case
+                        // `-2³¹ / -1` which is undefined behaviour in Mijit
+                        // but not in Beetle. So use `UDiv` instead.
+                        // If denominator (`STACK0`) is negative,
+                        // negate numerator (`R4`) and denominator.
+                        b.const_binary(Asr, R1, STACK0, 31);
+                        b.binary(Xor, R5, R4, R1);
+                        b.binary(Sub, R3, R5, R1);
+                        b.binary(Xor, R2, STACK0, R1);
+                        b.binary(Sub, R2, R2, R1);
+                        // If the numerator is negative, negate it.
+                        // If `R3` is `0x80000000` it can be positive or
+                        // negative depending on whether `R4` was negated.
+                        // So test `R5 < R1`, not `R3 < 0`.
+                        b.binary(Lt, R1, R5, R1);
+                        b.binary(Xor, R3, R3, R1);
+                        b.binary(Sub, R3, R3, R1);
+                        // Now both `R3` and `R2` are non-negative. Use `UDiv`.
+                        b.binary(UDiv, R2, R3, R2);
+                        // If the numerator was negative, invert the quotient.
+                        b.binary(Xor, R2, R2, R1);
+                        b.binary(Sub, R2, R2, R1);
+                        // Compute remainder.
+                        b.binary(Mul, R3, R2, STACK0);
+                        b.binary(Sub, R4, R4, R3);
+                        b.store(R4, BSP);
+                        b.push(R2, BSP);
+                    }, Ok(State::Root)),
+                ]),
+                build(|b| {
+                    // Restore the `OPCODE`.
+                    b.const_binary(Add, OPCODE, OPCODE, 0x26); // FIXME: Symbolic constant.
+                }, Err(Trap::NotImplemented)), // Should not happen.
             ),
             State::Lshift => Switch::if_(
                 OPCODE, // `Ult(STACK0, CELL_BITS)`
@@ -587,29 +716,34 @@ impl code::Machine for Machine {
                     }, Ok(State::Root)),
 
                     // /
-                    build(|_| {
-                        // TODO
-                    }, Err(Trap::NotImplemented)),
+                    build(|b| {
+                        b.pop(R2, BSP);
+                        b.move_(STACK0, R2);
+                    }, Ok(State::DivTest)),
 
                     // MOD
-                    build(|_| {
-                        // TODO
-                    }, Err(Trap::NotImplemented)),
+                    build(|b| {
+                        b.pop(R2, BSP);
+                        b.move_(STACK0, R2);
+                    }, Ok(State::DivTest)),
 
                     // /MOD
-                    build(|_| {
-                        // TODO
-                    }, Err(Trap::NotImplemented)),
+                    build(|b| {
+                        b.pop(R2, BSP);
+                        b.move_(STACK0, R2);
+                    }, Ok(State::DivTest)),
 
                     // U/MOD
-                    build(|_| {
-                        // TODO
-                    }, Err(Trap::NotImplemented)),
+                    build(|b| {
+                        b.pop(R2, BSP);
+                        b.move_(STACK0, R2);
+                    }, Ok(State::DivTest)),
 
                     // S/REM
-                    build(|_| {
-                        // TODO
-                    }, Err(Trap::NotImplemented)),
+                    build(|b| {
+                        b.pop(R2, BSP);
+                        b.move_(STACK0, R2);
+                    }, Ok(State::DivTest)),
 
                     // 2/
                     build(|b| {
@@ -910,10 +1044,7 @@ impl code::Machine for Machine {
                     }, Ok(State::Next)),
 
                     // THROW
-                    build(|b| {
-                        b.store_register(BEP, public_register!(bad));
-                        b.load_register(BEP, public_register!(throw)); // FIXME: Add check that EP is valid.
-                    }, Ok(State::Next)),
+                    build(|_| {}, Ok(State::Throw)),
 
                     // HALT
                     build(|_| {}, Err(Trap::Halt)),
