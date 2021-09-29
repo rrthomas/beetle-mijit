@@ -136,6 +136,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("{:#?}", vm);
             panic!("Opcode {:#x} is not implemented", opcode);
         },
+        BeetleExit::Undefined(opcode) => {
+            println!("{:#?}", vm);
+            panic!("Opcode {:#x} is undefined", opcode);
+        },
         BeetleExit::InvalidLibRoutine(routine) => {
             println!("{:#?}", vm);
             panic!("LIB routine {:#x} is not implemented", routine);

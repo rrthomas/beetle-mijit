@@ -72,7 +72,7 @@ pub enum Trap {
     Halt,
     NotImplemented,
     Lib,
-    Extra,
+    Undefined,
 }
 
 //-----------------------------------------------------------------------------
@@ -1058,13 +1058,11 @@ impl code::Machine for Machine {
                     build(|_| {}, Err(Trap::Lib)),
 
                     // UNDEFINED
-                    build(|_| {
-                        // TODO
-                    }, Err(Trap::NotImplemented)),
+                    build(|_| {}, Err(Trap::Undefined)),
 
                     // LINK
                     build(|_| {
-                        // TODO
+                        // WONTFIX: no sensible way to call machine code.
                     }, Err(Trap::NotImplemented)),
 
                     // S0@
@@ -1121,7 +1119,7 @@ impl code::Machine for Machine {
                         b.push(R1, BSP);
                     }, Ok(State::Root)),
                 ]),
-                build(|_| {}, Err(Trap::Extra)),
+                build(|_| {}, Err(Trap::Undefined)),
             ),
         }
     }

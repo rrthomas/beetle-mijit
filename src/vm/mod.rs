@@ -84,6 +84,7 @@ use machine::{State, Trap};
 pub enum BeetleExit {
     Halt,
     NotImplemented(u8),
+    Undefined(u8),
     InvalidLibRoutine(u32),
     Error(std::io::Error),
 }
@@ -406,8 +407,8 @@ impl<T: Target> VM<T> {
                         return (self, error);
                     }
                 },
-                Trap::Extra => {
-                    return (self, BeetleExit::Halt);
+                Trap::Undefined => {
+                    return (self, BeetleExit::Undefined(opcode as u8));
                 }
             }
         }
