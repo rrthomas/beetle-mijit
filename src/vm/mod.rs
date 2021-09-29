@@ -267,7 +267,7 @@ impl<T: Target> VM<T> {
     /** Runs LIB routine `routine`. */
     pub fn lib(&mut self, routine: u32) -> Result<(), BeetleExit> {
         match routine {
-            4 => { // OPEN_FILE.
+            4 => { // OPEN-FILE.
                 let perm = self.pop();
                 let len = self.pop();
                 let str_ = self.pop();
@@ -302,12 +302,12 @@ impl<T: Target> VM<T> {
                 self.push(result as u32);
                 Ok(())
             },
-            5 => { // CLOSE_FILE.
+            5 => { // CLOSE-FILE.
                 let fd = self.pop() as c_int;
                 self.push(unsafe {libc::close(fd)} as u32);
                 Ok(())
             },
-            6 => { // READ_FILE.
+            6 => { // READ-FILE.
                 let fd = self.pop() as c_int;
                 let nbytes = self.pop();
                 let buf = self.pop();
@@ -322,7 +322,7 @@ impl<T: Target> VM<T> {
                 self.push(if exception { !0 } else { 0 });
                 Ok(())
             },
-            7 => { // WRITE_FILE.
+            7 => { // WRITE-FILE.
                 let fd = self.pop() as c_int;
                 let nbytes = self.pop();
                 let buf = self.pop();
