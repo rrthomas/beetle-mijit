@@ -2,7 +2,7 @@
  * A utility for generating Mijit code that understands Beetle's conventions.
  */
 
-use mijit::code::{self, Precision, UnaryOp, BinaryOp, Width, Global, IntoVariable, Action, Case};
+use mijit::code::{self, Precision, UnaryOp, BinaryOp, Width, Register, Global, Action, Case};
 use Precision::*;
 use BinaryOp::*;
 use Width::*;
@@ -44,87 +44,49 @@ impl Builder {
         Builder(Vec::new())
     }
 
-    pub fn add_slots(&mut self, num_slots: usize) {
-        assert_eq!(num_slots & 1, 0);
-        for _ in 0..(num_slots >> 1) {
-            self.0.push(Push(None, None));
-        }
-    }
-
-    pub fn remove_slots(&mut self, num_slots: usize) {
-        assert_eq!(num_slots & 1, 0);
-        self.0.push(DropMany(num_slots >> 1));
-    }
-
-    pub fn move_(&mut self, dest: impl IntoVariable, src: impl IntoVariable) {
-        if dest.into() != src.into() {
+    pub fn move_(&mut self, dest: Register, src: Register) {
+        if dest != src {
             self.0.push(Move(dest.into(), src.into()));
         }
     }
 
-    pub fn const_(&mut self, dest: impl IntoVariable, constant: u32) {
-        self.0.push(Constant(P32, TEMP, constant as i64));
-        self.move_(dest, TEMP);
+    pub fn const_(&mut self, dest: Register, constant: u32) {
+        self.0.push(Constant(P32, dest, constant as i64));
     }
 
-    pub fn const64(&mut self, dest: impl IntoVariable, constant: u64) {
-        self.0.push(Constant(P64, TEMP, constant as i64));
-        self.move_(dest, TEMP);
+    pub fn const64(&mut self, dest: Register, constant: u64) {
+        self.0.push(Constant(P64, dest, constant as i64));
     }
 
     /**
      * Apply 32-bit `op` to `src`, writing `dest`.
      * `TEMP` is corrupted.
      */
-    pub fn unary(&mut self, op: UnaryOp, dest: impl IntoVariable, src: impl IntoVariable) {
-        self.0.push(Unary(op, P32, TEMP, src.into()));
-        self.move_(dest, TEMP);
+    pub fn unary(&mut self, op: UnaryOp, dest: Register, src: Register) {
+        self.0.push(Unary(op, P32, dest, src.into()));
     }
 
     /**
      * Apply 32-bit `op` to `src1` and `src2`, writing `dest`.
      * `TEMP` is corrupted.
      */
-    pub fn binary(&mut self, op: BinaryOp, dest: impl IntoVariable, src1: impl IntoVariable, src2: impl IntoVariable) {
-        self.0.push(Binary(op, P32, TEMP, src1.into(), src2.into()));
-        self.move_(dest, TEMP);
-    }
-
-    /**
-     * Apply 64-bit `op` to `src1` and `src2`, writing `dest`.
-     * `TEMP` is corrupted.
-     */
-    pub fn binary64(&mut self, op: BinaryOp, dest: impl IntoVariable, src1: impl IntoVariable, src2: impl IntoVariable) {
-        self.0.push(Binary(op, P64, TEMP, src1.into(), src2.into()));
-        self.move_(dest, TEMP);
+    pub fn binary(&mut self, op: BinaryOp, dest: Register, src1: Register, src2: Register) {
+        self.0.push(Binary(op, P32, dest, src1.into(), src2.into()));
     }
 
     /**
      * Apply 32-bit `op` to `src` and `constant`, writing `dest`.
      * `TEMP` is corrupted.
      */
-    pub fn const_binary(&mut self, op: BinaryOp, dest: impl IntoVariable, src: impl IntoVariable, constant: u32) {
-        assert_ne!(src.into(), TEMP.into());
+    pub fn const_binary(&mut self, op: BinaryOp, dest: Register, src: Register, constant: u32) {
+        assert_ne!(src, TEMP);
         self.const_(TEMP, constant);
         self.binary(op, dest, src, TEMP);
     }
 
-    /**
-     * Apply 64-bit `op` to `src` and `constant`, writing `dest`.
-     * `TEMP` is corrupted.
-     */
-    pub fn const_binary64(&mut self, op: BinaryOp, dest: impl IntoVariable, src: impl IntoVariable, constant: u64) {
-        assert_ne!(src.into(), TEMP.into());
-        self.const64(TEMP, constant);
-        self.binary64(op, dest, src, TEMP);
-    }
-
-    /**
-     * Compute the native address corresponding to `addr`.
-     * `TEMP` is corrupted.
-     */
-    pub fn native_address(&mut self, dest: impl IntoVariable, addr: impl IntoVariable) {
-        self.binary64(Add, dest, M0, addr);
+    /** Compute the native address corresponding to `addr`. */
+    pub fn native_address(&mut self, dest: Register, addr: Register) {
+        self.0.push(Binary(Add, P64, dest, M0.into(), addr.into()));
     }
 
     /**
@@ -132,10 +94,9 @@ impl Builder {
      * `TEMP` is corrupted.
      */
     // TODO: Bounds checking.
-    pub fn load(&mut self, dest: impl IntoVariable, addr: impl IntoVariable) {
+    pub fn load(&mut self, dest: Register, addr: Register) {
         self.native_address(TEMP, addr);
-        self.0.push(Load(TEMP, (TEMP.into(), Four), AM_MEMORY));
-        self.move_(dest, TEMP);
+        self.0.push(Load(dest, (TEMP.into(), Four), AM_MEMORY));
     }
 
     /**
@@ -143,8 +104,8 @@ impl Builder {
      * `TEMP` is corrupted.
      */
     // TODO: Bounds checking.
-    pub fn store(&mut self, src: impl IntoVariable, addr: impl IntoVariable) {
-        assert_ne!(src.into(), TEMP.into());
+    pub fn store(&mut self, src: Register, addr: Register) {
+        assert_ne!(src, TEMP);
         self.native_address(TEMP, addr);
         self.0.push(Store(TEMP, src.into(), (TEMP.into(), Four), AM_MEMORY));
     }
@@ -154,10 +115,9 @@ impl Builder {
      * `TEMP` is corrupted.
      */
     // TODO: Bounds checking.
-    pub fn load_byte(&mut self, dest: impl IntoVariable, addr: impl IntoVariable) {
+    pub fn load_byte(&mut self, dest: Register, addr: Register) {
         self.native_address(TEMP, addr);
-        self.0.push(Load(TEMP, (TEMP.into(), One), AM_MEMORY));
-        self.move_(dest, TEMP);
+        self.0.push(Load(dest, (TEMP.into(), One), AM_MEMORY));
     }
 
     /**
@@ -165,38 +125,42 @@ impl Builder {
      * `TEMP` is corrupted.
      */
     // TODO: Bounds checking.
-    pub fn store_byte(&mut self, src: impl IntoVariable, addr: impl IntoVariable) {
-        assert_ne!(src.into(), TEMP.into());
+    pub fn store_byte(&mut self, src: Register, addr: Register) {
+        assert_ne!(src, TEMP);
         self.native_address(TEMP, addr);
         self.0.push(Store(TEMP, src.into(), (TEMP.into(), One), AM_MEMORY));
+    }
+
+    /** Compute the native address `Global(0) + offset`. */
+    pub fn register_address(&mut self, dest: Register, offset: usize) {
+        self.const64(dest, offset as u64);
+        self.0.push(Binary(Add, P64, dest, Global(0).into(), dest.into()));
     }
 
     /**
      * Load 32 bits from host address `Global(0) + offset`.
      * `TEMP` is corrupted.
      */
-    pub fn load_register(&mut self, dest: impl IntoVariable, offset: usize) {
-        self.const_binary64(Add, TEMP, Global(0), offset as u64);
-        self.0.push(Load(TEMP, (TEMP.into(), Four), AM_REGISTER));
-        self.move_(dest, TEMP);
+    pub fn load_register(&mut self, dest: Register, offset: usize) {
+        self.register_address(TEMP, offset);
+        self.0.push(Load(dest, (TEMP.into(), Four), AM_REGISTER));
     }
 
     /**
      * Load 64 bits from host address `Global(0) + offset`.
      * `TEMP` is corrupted.
      */
-    pub fn load_register64(&mut self, dest: impl IntoVariable, offset: usize) {
-        self.const_binary64(Add, TEMP, Global(0), offset as u64);
-        self.0.push(Load(TEMP, (TEMP.into(), Eight), AM_REGISTER));
-        self.move_(dest, TEMP);
+    pub fn load_register64(&mut self, dest: Register, offset: usize) {
+        self.register_address(TEMP, offset);
+        self.0.push(Load(dest, (TEMP.into(), Eight), AM_REGISTER));
     }
 
     /**
      * Store 32 bits to host address `Global(0) + offset`.
      * `TEMP` is corrupted.
      */
-    pub fn store_register(&mut self, src: impl IntoVariable, offset: usize) {
-        self.const_binary64(Add, TEMP, Global(0), offset as u64);
+    pub fn store_register(&mut self, src: Register, offset: usize) {
+        self.register_address(TEMP, offset);
         self.0.push(Store(TEMP, src.into(), (TEMP.into(), Four), AM_REGISTER));
     }
 
@@ -204,8 +168,8 @@ impl Builder {
      * Store 64 bits to host address `Global(0) + offset`.
      * `TEMP` is corrupted.
      */
-    pub fn store_register64(&mut self, src: impl IntoVariable, offset: usize) {
-        self.const_binary64(Add, TEMP, Global(0), offset as u64);
+    pub fn store_register64(&mut self, src: Register, offset: usize) {
+        self.register_address(TEMP, offset);
         self.0.push(Store(TEMP, src.into(), (TEMP.into(), Eight), AM_REGISTER));
     }
 
@@ -213,28 +177,26 @@ impl Builder {
      * `load()` `dest` from `addr`, then increment `addr`.
      * `TEMP` is corrupted.
      */
-    pub fn pop(&mut self, dest: impl IntoVariable, addr: impl IntoVariable) {
-        assert_ne!(dest.into(), addr.into());
-        assert_ne!(dest.into(), TEMP.into());
+    pub fn pop(&mut self, dest: Register, addr: Register) {
+        assert_ne!(dest, addr);
+        assert_ne!(dest, TEMP);
         self.load(dest, addr);
-        self.const_binary(Add, TEMP, addr, CELL);
-        self.move_(addr, TEMP);
+        self.const_binary(Add, addr, addr, CELL);
     }
 
     /**
      * Decrement `addr` by `CELL`, then `store()` `src` at `addr`.
      * `TEMP` is corrupted.
      */
-    pub fn push(&mut self, src: impl IntoVariable, addr: impl IntoVariable) {
-        assert_ne!(src.into(), TEMP.into());
-        assert_ne!(src.into(), addr.into());
-        self.const_binary(Sub, TEMP, addr, CELL);
-        self.move_(addr, TEMP);
-        self.store(src, TEMP);
+    pub fn push(&mut self, src: Register, addr: Register) {
+        assert_ne!(src, TEMP);
+        assert_ne!(src, addr);
+        self.const_binary(Sub, addr, addr, CELL);
+        self.store(src, addr);
     }
 
     #[allow(dead_code)]
-    pub fn debug(&mut self, x: impl IntoVariable) {
+    pub fn debug(&mut self, x: Register) {
         self.0.push(Debug(x.into()));
     }
 

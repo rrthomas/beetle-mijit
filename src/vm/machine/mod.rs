@@ -21,18 +21,16 @@ pub const CELL_BITS: u32 = CELL * 8;
 
 /* Register allocation. */
 
-const NUM_SLOTS: usize = 4;
-
 const TEMP: Register = REGISTERS[0];
 const R1: Register = REGISTERS[1];
-const R2: Variable = Variable::Register(REGISTERS[2]);
-const R3: Variable = Variable::Register(REGISTERS[3]);
-const BEP: Variable = Variable::Register(REGISTERS[6]);
-const BA: Variable = Variable::Register(REGISTERS[7]);
-const BSP: Variable = Variable::Register(REGISTERS[8]);
-const BRP: Variable = Variable::Register(REGISTERS[9]);
-const M0: Variable = Variable::Register(REGISTERS[10]);
-const OPCODE: Variable = Variable::Register(REGISTERS[11]);
+const R2: Register = REGISTERS[2];
+const R3: Register = REGISTERS[3];
+const BEP: Register = REGISTERS[4];
+const BA: Register = REGISTERS[5];
+const BSP: Register = REGISTERS[6];
+const BRP: Register = REGISTERS[7];
+const M0: Register = REGISTERS[8];
+const OPCODE: Register = REGISTERS[9];
 
 //-----------------------------------------------------------------------------
 
@@ -102,7 +100,7 @@ impl code::Machine for Machine {
     fn num_globals(&self) -> usize { 1 }
 
     fn marshal(&self, state: Self::State) -> Marshal {
-        let mut live_values = vec![Global(0).into(), BEP, BSP, BRP, M0];
+        let mut live_values = vec![Global(0).into(), BEP.into(), BSP.into(), BRP.into(), M0.into()];
         #[allow(clippy::match_same_arms)]
         live_values.extend(match state {
             State::Root => vec![BA],
@@ -126,10 +124,9 @@ impl code::Machine for Machine {
             State::PloopiTest => vec![BA, OPCODE],
             State::Ploopi => vec![BA, OPCODE, R2, R3],
             State::Dispatch => vec![BA, OPCODE],
-        });
+        }.into_iter().map(Variable::Register));
         let prologue = {
             let mut b = Builder::new();
-            b.add_slots(NUM_SLOTS);
             b.load_register(BEP, public_register!(ep));
             b.load_register(BA, public_register!(a));
             b.load_register(BSP, public_register!(sp));
@@ -143,7 +140,7 @@ impl code::Machine for Machine {
         let epilogue = {
             let mut b = Builder::new();
             for v in [BA, OPCODE, R2, R3] {
-                if !live_values.contains(&v) {
+                if !live_values.contains(&Variable::Register(v)) {
                     b.const64(v, 0xDEADDEADDEADDEADu64);
                 }
             }
@@ -155,11 +152,10 @@ impl code::Machine for Machine {
             b.store_register(OPCODE, private_register!(opcode));
             b.store_register(R2, private_register!(r2));
             b.store_register(R3, private_register!(r3));
-            b.remove_slots(NUM_SLOTS);
             b.finish()
         };
         let convention = Convention {
-            slots_used: NUM_SLOTS,
+            slots_used: 0,
             live_values: live_values.into(),
         };
         Marshal {prologue, convention, epilogue}
@@ -180,7 +176,7 @@ impl code::Machine for Machine {
                 b.load_register(BEP, public_register!(throw)); // FIXME: Add check that EP is valid.
             }, Ok(State::Next))),
             State::Pick => Switch::new(
-                R2,
+                R2.into(),
                 (0..4).map(|u| build(|b| {
                     b.const_binary(Add, R1, BSP, (u + 1) * CELL);
                     b.load(R2, R1);
@@ -189,7 +185,7 @@ impl code::Machine for Machine {
                 build(|_| {}, Err(Trap::Halt)),
             ),
             State::Roll => Switch::new(
-                R2,
+                R2.into(),
                 (0..4).map(|u| build(|b| {
                     b.const_binary(Add, R1, BSP, u * CELL);
                     b.load(R3, R1);
@@ -205,14 +201,14 @@ impl code::Machine for Machine {
                 build(|_| {}, Err(Trap::Halt)),
             ),
             State::Qdup => Switch::if_(
-                R2,
+                R2.into(),
                 build(|b| {
                     b.push(R2, BSP);
                 }, Ok(State::Root)),
                 build(|_| {}, Ok(State::Root)),
             ),
             State::DivTest => Switch::if_(
-                R2, // denominator.
+                R2.into(), // denominator.
                 build(|b| {
                     b.const_binary(Sub, OPCODE, OPCODE, 0x26); // FIXME: Symbolic constant.
                     b.load(R3, BSP);
@@ -223,7 +219,7 @@ impl code::Machine for Machine {
                 }, Ok(State::Throw)),
             ),
             State::Divide => Switch::new(
-                OPCODE, // Beetle opcode - 0x26. FIXME: Symbolic constant.
+                OPCODE.into(), // Beetle opcode - 0x26. FIXME: Symbolic constant.
                 Box::new([
                     // /
                     build(|b| {
@@ -339,7 +335,7 @@ impl code::Machine for Machine {
                 }, Err(Trap::NotImplemented)), // Should not happen.
             ),
             State::Lshift => Switch::if_(
-                OPCODE, // `Ult(R2, CELL_BITS)`
+                OPCODE.into(), // `Ult(R2, CELL_BITS)`
                 build(|b| {
                     b.binary(Lsl, R2, R3, R2);
                     b.store(R2, BSP);
@@ -350,7 +346,7 @@ impl code::Machine for Machine {
                 }, Ok(State::Root)),
             ),
             State::Rshift => Switch::if_(
-                OPCODE, // `Ult(R2, CELL_BITS)`
+                OPCODE.into(), // `Ult(R2, CELL_BITS)`
                 build(|b| {
                     b.binary(Lsr, R2, R3, R2);
                     b.store(R2, BSP);
@@ -369,19 +365,19 @@ impl code::Machine for Machine {
                 b.binary(Add, BEP, BEP, R1); // FIXME: Add check that EP is valid.
             }, Ok(State::Next))),
             State::Qbranch => Switch::if_(
-                R2,
+                R2.into(),
                 build(|b| {
                     b.const_binary(Add, BEP, BEP, CELL);
                 }, Ok(State::Root)),
                 build(|_| {}, Ok(State::Branch)),
             ),
             State::Qbranchi => Switch::if_(
-                R2,
+                R2.into(),
                 build(|_| {}, Ok(State::Next)),
                 build(|_| {}, Ok(State::Branchi)),
             ),
             State::Loop => Switch::if_(
-                OPCODE, // zero to exit the loop
+                OPCODE.into(), // zero to exit the loop
                 build(|_| {}, Ok(State::Branch)),
                 build(|b| {
                     // Discard the loop index and limit.
@@ -391,7 +387,7 @@ impl code::Machine for Machine {
                 }, Ok(State::Root)),
             ),
             State::Loopi => Switch::if_(
-                OPCODE, // zero to exit the loop
+                OPCODE.into(), // zero to exit the loop
                 build(|_| {}, Ok(State::Branchi)),
                 build(|b| {
                     // Discard the loop index and limit.
@@ -399,7 +395,7 @@ impl code::Machine for Machine {
                 }, Ok(State::Next)),
             ),
             State::PloopTest => Switch::if_(
-                OPCODE, // non-zero to exit the loop
+                OPCODE.into(), // non-zero to exit the loop
                 build(|b| {
                     // Discard the loop index and limit.
                     b.const_binary(Add, BRP, BRP, 2 * CELL);
@@ -409,7 +405,7 @@ impl code::Machine for Machine {
                 build(|_| {}, Ok(State::Branch)),
             ),
             State::Ploop => Switch::if_(
-                OPCODE, // Lt(step, 0)
+                OPCODE.into(), // Lt(step, 0)
                 build(|b| {
                     b.unary(Not, R2, R2);
                     b.binary(And, R3, R3, R2);
@@ -422,7 +418,7 @@ impl code::Machine for Machine {
                 }, Ok(State::PloopTest)),
             ),
             State::PloopiTest => Switch::if_(
-                OPCODE, // non-zero to exit the loop
+                OPCODE.into(), // non-zero to exit the loop
                 build(|b| {
                     // Discard the loop index and limit.
                     b.const_binary(Add, BRP, BRP, 2 * CELL);
@@ -430,7 +426,7 @@ impl code::Machine for Machine {
                 build(|_| {}, Ok(State::Branchi)),
             ),
             State::Ploopi => Switch::if_(
-                OPCODE, // Lt(step, 0)
+                OPCODE.into(), // Lt(step, 0)
                 build(|b| {
                     b.unary(Not, R2, R2);
                     b.binary(And, R3, R3, R2);
@@ -443,7 +439,7 @@ impl code::Machine for Machine {
                 }, Ok(State::PloopiTest)),
             ),
             State::Dispatch => Switch::new(
-                OPCODE,
+                OPCODE.into(),
                 Box::new([
                     // NEXT
                     build(|_| {}, Ok(State::Next)),
