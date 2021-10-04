@@ -48,8 +48,8 @@ struct AllRegisters {
     public: Registers,
     m0: u64,
     opcode: u32,
-    stack0: u32,
-    stack1: u32,
+    r2: u32,
+    r3: u32,
     loop_new: u32,
     loop_old: u32,
 }
@@ -60,8 +60,8 @@ impl std::fmt::Debug for AllRegisters {
             .field("public", &self.public)
             .field("m0", &format!("{:#x}", self.m0))
             .field("opcode", &format!("{:#x}", self.opcode))
-            .field("stack0", &format!("{:#x}", self.stack0))
-            .field("stack1", &format!("{:#x}", self.stack1))
+            .field("r2", &format!("{:#x}", self.r2))
+            .field("r3", &format!("{:#x}", self.r3))
             .field("loop_new", &format!("{:#x}", self.loop_new))
             .field("loop_old", &format!("{:#x}", self.loop_old))
             .finish()

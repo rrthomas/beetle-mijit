@@ -25,8 +25,8 @@ const NUM_SLOTS: usize = 4;
 
 const TEMP: Register = REGISTERS[0];
 const R1: Register = REGISTERS[1];
-const R2: Register = REGISTERS[2];
-const R3: Register = REGISTERS[3];
+const R2: Variable = Variable::Register(REGISTERS[2]);
+const R3: Variable = Variable::Register(REGISTERS[3]);
 
 const BEP: Variable = Variable::Register(REGISTERS[6]);
 const BA: Variable = Variable::Register(REGISTERS[7]);
@@ -34,8 +34,6 @@ const BSP: Variable = Variable::Register(REGISTERS[8]);
 const BRP: Variable = Variable::Register(REGISTERS[9]);
 const M0: Variable = Variable::Register(REGISTERS[10]);
 const OPCODE: Variable = Variable::Register(REGISTERS[11]);
-const STACK0: Variable = Variable::Slot(Slot(0));
-const STACK1: Variable = Variable::Slot(Slot(1));
 const LOOP_NEW: Variable = Variable::Slot(Slot(2));
 const LOOP_OLD: Variable = Variable::Slot(Slot(3));
 
@@ -113,17 +111,17 @@ impl code::Machine for Machine {
             State::Root => vec![BA],
             State::Next => vec![],
             State::Throw => vec![],
-            State::Pick => vec![BA, STACK0],
-            State::Roll => vec![BA, STACK0],
-            State::Qdup => vec![BA, STACK0],
-            State::DivTest => vec![BA, OPCODE, STACK0],
-            State::Divide => vec![BA, OPCODE, STACK0],
-            State::Lshift => vec![BA, OPCODE, STACK0, STACK1],
-            State::Rshift => vec![BA, OPCODE, STACK0, STACK1],
+            State::Pick => vec![BA, R2],
+            State::Roll => vec![BA, R2],
+            State::Qdup => vec![BA, R2],
+            State::DivTest => vec![BA, OPCODE, R2],
+            State::Divide => vec![BA, OPCODE, R2],
+            State::Lshift => vec![BA, OPCODE, R2, R3],
+            State::Rshift => vec![BA, OPCODE, R2, R3],
             State::Branch => vec![],
             State::Branchi => vec![BA],
-            State::Qbranch => vec![BA, STACK0],
-            State::Qbranchi => vec![BA, STACK0],
+            State::Qbranch => vec![BA, R2],
+            State::Qbranchi => vec![BA, R2],
             State::Loop => vec![BA, OPCODE],
             State::Loopi => vec![BA, OPCODE],
             State::PloopTest => vec![BA, OPCODE],
@@ -141,15 +139,15 @@ impl code::Machine for Machine {
             b.load_register(BRP, public_register!(rp));
             b.load_register64(M0, private_register!(m0));
             b.load_register(OPCODE, private_register!(opcode));
-            b.load_register(STACK0, private_register!(stack0));
-            b.load_register(STACK1, private_register!(stack1));
+            b.load_register(R2, private_register!(r2));
+            b.load_register(R3, private_register!(r3));
             b.load_register(LOOP_NEW, private_register!(loop_new));
             b.load_register(LOOP_OLD, private_register!(loop_old));
             b.finish()
         };
         let epilogue = {
             let mut b = Builder::new();
-            for v in [BA, OPCODE, STACK0, STACK1, LOOP_NEW, LOOP_OLD] {
+            for v in [BA, OPCODE, R2, R3, LOOP_NEW, LOOP_OLD] {
                 if !live_values.contains(&v) {
                     b.const64(v, 0xDEADDEADDEADDEADu64);
                 }
@@ -160,8 +158,8 @@ impl code::Machine for Machine {
             b.store_register(BRP, public_register!(rp));
             b.store_register64(M0, private_register!(m0));
             b.store_register(OPCODE, private_register!(opcode));
-            b.store_register(STACK0, private_register!(stack0));
-            b.store_register(STACK1, private_register!(stack1));
+            b.store_register(R2, private_register!(r2));
+            b.store_register(R3, private_register!(r3));
             b.store_register(LOOP_NEW, private_register!(loop_new));
             b.store_register(LOOP_OLD, private_register!(loop_old));
             b.remove_slots(NUM_SLOTS);
@@ -189,7 +187,7 @@ impl code::Machine for Machine {
                 b.load_register(BEP, public_register!(throw)); // FIXME: Add check that EP is valid.
             }, Ok(State::Next))),
             State::Pick => Switch::new(
-                STACK0,
+                R2,
                 (0..4).map(|u| build(|b| {
                     b.const_binary(Add, R1, BSP, (u + 1) * CELL);
                     b.load(R2, R1);
@@ -198,7 +196,7 @@ impl code::Machine for Machine {
                 build(|_| {}, Err(Trap::Halt)),
             ),
             State::Roll => Switch::new(
-                STACK0,
+                R2,
                 (0..4).map(|u| build(|b| {
                     b.const_binary(Add, R1, BSP, u * CELL);
                     b.load(R3, R1);
@@ -214,14 +212,14 @@ impl code::Machine for Machine {
                 build(|_| {}, Err(Trap::Halt)),
             ),
             State::Qdup => Switch::if_(
-                STACK0,
+                R2,
                 build(|b| {
-                    b.push(STACK0, BSP);
+                    b.push(R2, BSP);
                 }, Ok(State::Root)),
                 build(|_| {}, Ok(State::Root)),
             ),
             State::DivTest => Switch::if_(
-                STACK0, // denominator.
+                R2, // denominator.
                 build(|b| {
                     b.const_binary(Sub, OPCODE, OPCODE, 0x26); // FIXME: Symbolic constant.
                     b.load(R3, BSP);
@@ -236,12 +234,12 @@ impl code::Machine for Machine {
                 Box::new([
                     // /
                     build(|b| {
-                        // If denominator (`STACK0`) is negative,
+                        // If denominator (`R2`) is negative,
                         // negate numerator (`R3`) and denominator.
-                        b.const_binary(Asr, OPCODE, STACK0, 31);
+                        b.const_binary(Asr, OPCODE, R2, 31);
                         b.binary(Xor, R1, R3, OPCODE);
                         b.binary(Sub, R3, R1, OPCODE);
-                        b.binary(Xor, R2, STACK0, OPCODE);
+                        b.binary(Xor, R2, R2, OPCODE);
                         b.binary(Sub, R2, R2, OPCODE);
                         // If the numerator is negative, invert it.
                         // If `R3` is `0x80000000` it can be positive or
@@ -258,10 +256,10 @@ impl code::Machine for Machine {
                     // MOD
                     build(|b| {
                         // See "/".
-                        b.const_binary(Asr, OPCODE, STACK0, 31);
+                        b.const_binary(Asr, OPCODE, R2, 31);
                         b.binary(Xor, R1, R3, OPCODE);
                         b.binary(Sub, R3, R1, OPCODE);
-                        b.binary(Xor, R2, STACK0, OPCODE);
+                        b.binary(Xor, R2, R2, OPCODE);
                         b.binary(Sub, R2, R2, OPCODE);
                         b.binary(Lt, OPCODE, R1, OPCODE);
                         b.binary(Xor, R3, R3, OPCODE);
@@ -278,10 +276,10 @@ impl code::Machine for Machine {
                     // /MOD
                     build(|b| {
                         // See "/".
-                        b.const_binary(Asr, OPCODE, STACK0, 31);
+                        b.const_binary(Asr, OPCODE, R2, 31);
                         b.binary(Xor, R1, R3, OPCODE);
                         b.binary(Sub, R3, R1, OPCODE);
-                        b.binary(Xor, R2, STACK0, OPCODE);
+                        b.binary(Xor, R2, R2, OPCODE);
                         b.binary(Sub, R2, R2, OPCODE);
                         b.binary(Lt, OPCODE, R1, OPCODE);
                         b.binary(Xor, R3, R3, OPCODE);
@@ -298,7 +296,7 @@ impl code::Machine for Machine {
                     }, Ok(State::Root)),
                     // U/MOD
                     build(|b| {
-                        b.binary(UDiv, R2, R3, STACK0);
+                        b.binary(UDiv, R2, R3, R2);
                         // Compute remainder.
                         b.const_binary(Sub, R1, BSP, CELL);
                         b.load(R1, R1);
@@ -313,12 +311,12 @@ impl code::Machine for Machine {
                         // Cannot use Mijit's `SDiv` because of the case
                         // `-2³¹ / -1` which is undefined behaviour in Mijit
                         // but not in Beetle. So use `UDiv` instead.
-                        // If denominator (`STACK0`) is negative,
+                        // If denominator (`R2`) is negative,
                         // negate numerator (`R3`) and denominator.
-                        b.const_binary(Asr, OPCODE, STACK0, 31);
+                        b.const_binary(Asr, OPCODE, R2, 31);
                         b.binary(Xor, R1, R3, OPCODE);
                         b.binary(Sub, R3, R1, OPCODE);
-                        b.binary(Xor, R2, STACK0, OPCODE);
+                        b.binary(Xor, R2, R2, OPCODE);
                         b.binary(Sub, R2, R2, OPCODE);
                         // If the numerator is negative, negate it.
                         // If `R3` is `0x80000000` it can be positive or
@@ -348,9 +346,9 @@ impl code::Machine for Machine {
                 }, Err(Trap::NotImplemented)), // Should not happen.
             ),
             State::Lshift => Switch::if_(
-                OPCODE, // `Ult(STACK0, CELL_BITS)`
+                OPCODE, // `Ult(R2, CELL_BITS)`
                 build(|b| {
-                    b.binary(Lsl, R2, STACK1, STACK0);
+                    b.binary(Lsl, R2, R3, R2);
                     b.store(R2, BSP);
                 }, Ok(State::Root)),
                 build(|b| {
@@ -359,9 +357,9 @@ impl code::Machine for Machine {
                 }, Ok(State::Root)),
             ),
             State::Rshift => Switch::if_(
-                OPCODE, // `Ult(STACK0, CELL_BITS)`
+                OPCODE, // `Ult(R2, CELL_BITS)`
                 build(|b| {
-                    b.binary(Lsr, R2, STACK1, STACK0);
+                    b.binary(Lsr, R2, R3, R2);
                     b.store(R2, BSP);
                 }, Ok(State::Root)),
                 build(|b| {
@@ -378,14 +376,14 @@ impl code::Machine for Machine {
                 b.binary(Add, BEP, BEP, R1); // FIXME: Add check that EP is valid.
             }, Ok(State::Next))),
             State::Qbranch => Switch::if_(
-                STACK0,
+                R2,
                 build(|b| {
                     b.const_binary(Add, BEP, BEP, CELL);
                 }, Ok(State::Root)),
                 build(|_| {}, Ok(State::Branch)),
             ),
             State::Qbranchi => Switch::if_(
-                STACK0,
+                R2,
                 build(|_| {}, Ok(State::Next)),
                 build(|_| {}, Ok(State::Branchi)),
             ),
@@ -525,17 +523,17 @@ impl code::Machine for Machine {
 
                     // PICK
                     build(|b| {
-                        b.load(STACK0, BSP);
+                        b.load(R2, BSP);
                     }, Ok(State::Pick)),
 
                     // ROLL
                     build(|b| {
-                        b.pop(STACK0, BSP);
+                        b.pop(R2, BSP);
                     }, Ok(State::Roll)),
 
                     // ?DUP
                     build(|b| {
-                        b.load(STACK0, BSP);
+                        b.load(R2, BSP);
                     }, Ok(State::Qdup)),
 
                     // >R
@@ -728,31 +726,26 @@ impl code::Machine for Machine {
                     // /
                     build(|b| {
                         b.pop(R2, BSP);
-                        b.move_(STACK0, R2);
                     }, Ok(State::DivTest)),
 
                     // MOD
                     build(|b| {
                         b.pop(R2, BSP);
-                        b.move_(STACK0, R2);
                     }, Ok(State::DivTest)),
 
                     // /MOD
                     build(|b| {
                         b.pop(R2, BSP);
-                        b.move_(STACK0, R2);
                     }, Ok(State::DivTest)),
 
                     // U/MOD
                     build(|b| {
                         b.pop(R2, BSP);
-                        b.move_(STACK0, R2);
                     }, Ok(State::DivTest)),
 
                     // S/REM
                     build(|b| {
                         b.pop(R2, BSP);
-                        b.move_(STACK0, R2);
                     }, Ok(State::DivTest)),
 
                     // 2/
@@ -832,16 +825,16 @@ impl code::Machine for Machine {
 
                     // LSHIFT
                     build(|b| {
-                        b.pop(STACK0, BSP);
-                        b.load(STACK1, BSP);
-                        b.const_binary(Ult, OPCODE, STACK0, CELL_BITS);
+                        b.pop(R2, BSP);
+                        b.load(R3, BSP);
+                        b.const_binary(Ult, OPCODE, R2, CELL_BITS);
                     }, Ok(State::Lshift)),
 
                     // RSHIFT
                     build(|b| {
-                        b.pop(STACK0, BSP);
-                        b.load(STACK1, BSP);
-                        b.const_binary(Ult, OPCODE, STACK0, CELL_BITS);
+                        b.pop(R2, BSP);
+                        b.load(R3, BSP);
+                        b.const_binary(Ult, OPCODE, R2, CELL_BITS);
                     }, Ok(State::Rshift)),
 
                     // 1LSHIFT
@@ -924,12 +917,12 @@ impl code::Machine for Machine {
 
                     // ?BRANCH
                     build(|b| {
-                        b.pop(STACK0, BSP);
+                        b.pop(R2, BSP);
                     }, Ok(State::Qbranch)),
 
                     // ?BRANCHI
                     build(|b| {
-                        b.pop(STACK0, BSP);
+                        b.pop(R2, BSP);
                     }, Ok(State::Qbranchi)),
 
                     // EXECUTE
