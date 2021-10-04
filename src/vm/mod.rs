@@ -50,8 +50,6 @@ struct AllRegisters {
     opcode: u32,
     r2: u32,
     r3: u32,
-    loop_new: u32,
-    loop_old: u32,
 }
 
 impl std::fmt::Debug for AllRegisters {
@@ -62,8 +60,6 @@ impl std::fmt::Debug for AllRegisters {
             .field("opcode", &format!("{:#x}", self.opcode))
             .field("r2", &format!("{:#x}", self.r2))
             .field("r3", &format!("{:#x}", self.r3))
-            .field("loop_new", &format!("{:#x}", self.loop_new))
-            .field("loop_old", &format!("{:#x}", self.loop_old))
             .finish()
     }
 }

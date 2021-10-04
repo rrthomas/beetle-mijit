@@ -3,7 +3,7 @@
 use std::num::{Wrapping};
 use memoffset::{offset_of};
 use mijit::code::{
-    self, UnaryOp, BinaryOp, Global, Slot, Register, REGISTERS, Variable,
+    self, UnaryOp, BinaryOp, Global, Register, REGISTERS, Variable,
     Switch, Case, Convention, Marshal,
 };
 use UnaryOp::*;
@@ -27,15 +27,12 @@ const TEMP: Register = REGISTERS[0];
 const R1: Register = REGISTERS[1];
 const R2: Variable = Variable::Register(REGISTERS[2]);
 const R3: Variable = Variable::Register(REGISTERS[3]);
-
 const BEP: Variable = Variable::Register(REGISTERS[6]);
 const BA: Variable = Variable::Register(REGISTERS[7]);
 const BSP: Variable = Variable::Register(REGISTERS[8]);
 const BRP: Variable = Variable::Register(REGISTERS[9]);
 const M0: Variable = Variable::Register(REGISTERS[10]);
 const OPCODE: Variable = Variable::Register(REGISTERS[11]);
-const LOOP_NEW: Variable = Variable::Slot(Slot(2));
-const LOOP_OLD: Variable = Variable::Slot(Slot(3));
 
 //-----------------------------------------------------------------------------
 
@@ -125,9 +122,9 @@ impl code::Machine for Machine {
             State::Loop => vec![BA, OPCODE],
             State::Loopi => vec![BA, OPCODE],
             State::PloopTest => vec![BA, OPCODE],
-            State::Ploop => vec![BA, OPCODE, LOOP_NEW, LOOP_OLD],
+            State::Ploop => vec![BA, OPCODE, R2, R3],
             State::PloopiTest => vec![BA, OPCODE],
-            State::Ploopi => vec![BA, OPCODE, LOOP_NEW, LOOP_OLD],
+            State::Ploopi => vec![BA, OPCODE, R2, R3],
             State::Dispatch => vec![BA, OPCODE],
         });
         let prologue = {
@@ -141,13 +138,11 @@ impl code::Machine for Machine {
             b.load_register(OPCODE, private_register!(opcode));
             b.load_register(R2, private_register!(r2));
             b.load_register(R3, private_register!(r3));
-            b.load_register(LOOP_NEW, private_register!(loop_new));
-            b.load_register(LOOP_OLD, private_register!(loop_old));
             b.finish()
         };
         let epilogue = {
             let mut b = Builder::new();
-            for v in [BA, OPCODE, R2, R3, LOOP_NEW, LOOP_OLD] {
+            for v in [BA, OPCODE, R2, R3] {
                 if !live_values.contains(&v) {
                     b.const64(v, 0xDEADDEADDEADDEADu64);
                 }
@@ -160,8 +155,6 @@ impl code::Machine for Machine {
             b.store_register(OPCODE, private_register!(opcode));
             b.store_register(R2, private_register!(r2));
             b.store_register(R3, private_register!(r3));
-            b.store_register(LOOP_NEW, private_register!(loop_new));
-            b.store_register(LOOP_OLD, private_register!(loop_old));
             b.remove_slots(NUM_SLOTS);
             b.finish()
         };
@@ -418,14 +411,14 @@ impl code::Machine for Machine {
             State::Ploop => Switch::if_(
                 OPCODE, // Lt(step, 0)
                 build(|b| {
-                    b.unary(Not, LOOP_OLD, LOOP_OLD);
-                    b.binary(And, LOOP_NEW, LOOP_NEW, LOOP_OLD);
-                    b.const_binary(Lt, OPCODE, LOOP_NEW, 0);
+                    b.unary(Not, R2, R2);
+                    b.binary(And, R3, R3, R2);
+                    b.const_binary(Lt, OPCODE, R3, 0);
                 }, Ok(State::PloopTest)),
                 build(|b| {
-                    b.unary(Not, LOOP_NEW, LOOP_NEW);
-                    b.binary(And, LOOP_NEW, LOOP_NEW, LOOP_OLD);
-                    b.const_binary(Lt, OPCODE, LOOP_NEW, 0);
+                    b.unary(Not, R3, R3);
+                    b.binary(And, R3, R3, R2);
+                    b.const_binary(Lt, OPCODE, R3, 0);
                 }, Ok(State::PloopTest)),
             ),
             State::PloopiTest => Switch::if_(
@@ -439,14 +432,14 @@ impl code::Machine for Machine {
             State::Ploopi => Switch::if_(
                 OPCODE, // Lt(step, 0)
                 build(|b| {
-                    b.unary(Not, LOOP_OLD, LOOP_OLD);
-                    b.binary(And, LOOP_NEW, LOOP_NEW, LOOP_OLD);
-                    b.const_binary(Lt, OPCODE, LOOP_NEW, 0);
+                    b.unary(Not, R2, R2);
+                    b.binary(And, R3, R3, R2);
+                    b.const_binary(Lt, OPCODE, R3, 0);
                 }, Ok(State::PloopiTest)),
                 build(|b| {
-                    b.unary(Not, LOOP_NEW, LOOP_NEW);
-                    b.binary(And, LOOP_NEW, LOOP_NEW, LOOP_OLD);
-                    b.const_binary(Lt, OPCODE, LOOP_NEW, 0);
+                    b.unary(Not, R3, R3);
+                    b.binary(And, R3, R3, R2);
+                    b.const_binary(Lt, OPCODE, R3, 0);
                 }, Ok(State::PloopiTest)),
             ),
             State::Dispatch => Switch::new(
@@ -997,8 +990,8 @@ impl code::Machine for Machine {
                         b.binary(Add, R1, R2, OPCODE);
                         b.push(R1, BRP);
                         // Compute the differences between old and new indexes and limit.
-                        b.binary(Sub, LOOP_OLD, R2, R3);
-                        b.binary(Sub, LOOP_NEW, R1, R3);
+                        b.binary(Sub, R2, R2, R3);
+                        b.binary(Sub, R3, R1, R3);
                         // Is the step negative?
                         b.const_binary(Lt, OPCODE, OPCODE, 0);
                     }, Ok(State::Ploop)),
@@ -1014,8 +1007,8 @@ impl code::Machine for Machine {
                         b.binary(Add, R1, R2, OPCODE);
                         b.push(R1, BRP);
                         // Compute the differences between old and new indexes and limit.
-                        b.binary(Sub, LOOP_OLD, R2, R3);
-                        b.binary(Sub, LOOP_NEW, R1, R3);
+                        b.binary(Sub, R2, R2, R3);
+                        b.binary(Sub, R3, R1, R3);
                         // Is the step negative?
                         b.const_binary(Lt, OPCODE, OPCODE, 0);
                     }, Ok(State::Ploopi)),
