@@ -7,7 +7,7 @@ use Precision::*;
 use BinaryOp::*;
 use Width::*;
 use Action::*;
-use super::{State, Trap, TEMP, M0, cell_bytes};
+use super::{CELL, State, Trap, TEMP, M0};
 
 /**
  * Beetle's address space is unified, so we always use the same `AliasMask`.
@@ -62,13 +62,13 @@ impl Builder {
         }
     }
 
-    pub fn const_(&mut self, dest: impl IntoVariable, constant: i64) {
-        self.0.push(Constant(P32, TEMP, constant));
+    pub fn const_(&mut self, dest: impl IntoVariable, constant: u32) {
+        self.0.push(Constant(P32, TEMP, constant as i64));
         self.move_(dest, TEMP);
     }
 
-    pub fn const64(&mut self, dest: impl IntoVariable, constant: i64) {
-        self.0.push(Constant(P64, TEMP, constant));
+    pub fn const64(&mut self, dest: impl IntoVariable, constant: u64) {
+        self.0.push(Constant(P64, TEMP, constant as i64));
         self.move_(dest, TEMP);
     }
 
@@ -103,7 +103,7 @@ impl Builder {
      * Apply 32-bit `op` to `src` and `constant`, writing `dest`.
      * `TEMP` is corrupted.
      */
-    pub fn const_binary(&mut self, op: BinaryOp, dest: impl IntoVariable, src: impl IntoVariable, constant: i64) {
+    pub fn const_binary(&mut self, op: BinaryOp, dest: impl IntoVariable, src: impl IntoVariable, constant: u32) {
         assert_ne!(src.into(), TEMP.into());
         self.const_(TEMP, constant);
         self.binary(op, dest, src, TEMP);
@@ -113,7 +113,7 @@ impl Builder {
      * Apply 64-bit `op` to `src` and `constant`, writing `dest`.
      * `TEMP` is corrupted.
      */
-    pub fn const_binary64(&mut self, op: BinaryOp, dest: impl IntoVariable, src: impl IntoVariable, constant: i64) {
+    pub fn const_binary64(&mut self, op: BinaryOp, dest: impl IntoVariable, src: impl IntoVariable, constant: u64) {
         assert_ne!(src.into(), TEMP.into());
         self.const64(TEMP, constant);
         self.binary64(op, dest, src, TEMP);
@@ -176,7 +176,7 @@ impl Builder {
      * `TEMP` is corrupted.
      */
     pub fn load_register(&mut self, dest: impl IntoVariable, offset: usize) {
-        self.const_binary64(Add, TEMP, Global(0), offset as i64);
+        self.const_binary64(Add, TEMP, Global(0), offset as u64);
         self.0.push(Load(TEMP, (TEMP.into(), Four), AM_REGISTER));
         self.move_(dest, TEMP);
     }
@@ -186,7 +186,7 @@ impl Builder {
      * `TEMP` is corrupted.
      */
     pub fn load_register64(&mut self, dest: impl IntoVariable, offset: usize) {
-        self.const_binary64(Add, TEMP, Global(0), offset as i64);
+        self.const_binary64(Add, TEMP, Global(0), offset as u64);
         self.0.push(Load(TEMP, (TEMP.into(), Eight), AM_REGISTER));
         self.move_(dest, TEMP);
     }
@@ -196,7 +196,7 @@ impl Builder {
      * `TEMP` is corrupted.
      */
     pub fn store_register(&mut self, src: impl IntoVariable, offset: usize) {
-        self.const_binary64(Add, TEMP, Global(0), offset as i64);
+        self.const_binary64(Add, TEMP, Global(0), offset as u64);
         self.0.push(Store(TEMP, src.into(), (TEMP.into(), Four), AM_REGISTER));
     }
 
@@ -205,7 +205,7 @@ impl Builder {
      * `TEMP` is corrupted.
      */
     pub fn store_register64(&mut self, src: impl IntoVariable, offset: usize) {
-        self.const_binary64(Add, TEMP, Global(0), offset as i64);
+        self.const_binary64(Add, TEMP, Global(0), offset as u64);
         self.0.push(Store(TEMP, src.into(), (TEMP.into(), Eight), AM_REGISTER));
     }
 
@@ -217,18 +217,18 @@ impl Builder {
         assert_ne!(dest.into(), addr.into());
         assert_ne!(dest.into(), TEMP.into());
         self.load(dest, addr);
-        self.const_binary(Add, TEMP, addr, cell_bytes(1));
+        self.const_binary(Add, TEMP, addr, CELL);
         self.move_(addr, TEMP);
     }
 
     /**
-     * Decrement `addr` by `cell_bytes(1)`, then `store()` `src` at `addr`.
+     * Decrement `addr` by `CELL`, then `store()` `src` at `addr`.
      * `TEMP` is corrupted.
      */
     pub fn push(&mut self, src: impl IntoVariable, addr: impl IntoVariable) {
         assert_ne!(src.into(), TEMP.into());
         assert_ne!(src.into(), addr.into());
-        self.const_binary(Sub, TEMP, addr, cell_bytes(1));
+        self.const_binary(Sub, TEMP, addr, CELL);
         self.move_(addr, TEMP);
         self.store(src, TEMP);
     }

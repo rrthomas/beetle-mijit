@@ -1,4 +1,4 @@
-use std::convert::{TryFrom, TryInto};
+use std::convert::{TryFrom};
 use libc::{c_int};
 use mijit::target::{Target, Word};
 use mijit::{jit};
@@ -70,11 +70,8 @@ impl std::fmt::Debug for AllRegisters {
 
 //-----------------------------------------------------------------------------
 
-/** Computes the number of bytes in `n` cells. */
-pub const fn cell_bytes(n: i64) -> i64 { 4 * n }
-
 mod machine;
-pub use machine::{Machine};
+pub use machine::{CELL, Machine};
 use machine::{State, Trap};
 
 //-----------------------------------------------------------------------------
@@ -142,9 +139,8 @@ impl<T: Target> VM<T> {
             halt_addr: 0,
         };
         // Set memory size register.
-        vm.registers_mut().memory = u32::try_from(
-            cell_bytes(i64::from(memory_cells))
-        ).expect("Address out of range");
+        vm.registers_mut().memory = memory_cells.checked_mul(CELL)
+            .expect("Address out of range");
         // Allocate the data stack.
         let sp = vm.allocate(data_cells).1;
         vm.registers_mut().s0 = sp;
@@ -171,13 +167,12 @@ impl<T: Target> VM<T> {
      */
     pub fn allocate(&mut self, cells: u32) -> (u32, u32) {
         assert!(cells <= self.free_cells);
-        let end = u32::try_from(
-            cell_bytes(i64::from(self.free_cells))
-        ).expect("Address out of range");
-        self.free_cells -= cells;
-        let start = u32::try_from(
-            cell_bytes(i64::from(self.free_cells))
-        ).expect("Address out of range");
+        let end = self.free_cells.checked_mul(CELL)
+            .expect("Address out of range");
+        self.free_cells = self.free_cells.checked_sub(cells)
+            .expect("Out of memory");
+        let start = self.free_cells.checked_mul(CELL)
+            .expect("Address out of range");
         (start, end)
     }
 
@@ -226,14 +221,14 @@ impl<T: Target> VM<T> {
 
     /** Push `item` onto the data stack. */
     pub fn push(&mut self, item: u32) {
-        self.registers_mut().sp -= cell_bytes(1) as u32;
+        self.registers_mut().sp -= CELL;
         self.store(self.registers().sp, item);
     }
 
     /** Pop an item from the data stack. */
     pub fn pop(&mut self) -> u32 {
         let item = self.load(self.registers().sp);
-        self.registers_mut().sp += cell_bytes(1) as u32;
+        self.registers_mut().sp += CELL;
         item
     }
 
@@ -252,14 +247,14 @@ impl<T: Target> VM<T> {
 
     /** Push `item` onto the return stack. */
     pub fn rpush(&mut self, item: u32) {
-        self.registers_mut().rp -= cell_bytes(1) as u32;
+        self.registers_mut().rp -= CELL;
         self.store(self.registers().rp, item);
     }
 
     /** Pop an item from the return stack. */
     pub fn rpop(&mut self) -> u32 {
         let item = self.load(self.registers().rp);
-        self.registers_mut().rp += cell_bytes(1) as u32;
+        self.registers_mut().rp += CELL;
         item
     }
 
@@ -331,7 +326,7 @@ impl<T: Target> VM<T> {
                     result = unsafe {libc::read(fd, native_buf, nbytes as usize)};
                     exception &= result < 0;
                 }
-                self.push(result.try_into().unwrap());
+                self.push(i32::try_from(result).expect("Too many bytes read") as u32);
                 self.push(if exception { !0 } else { 0 });
                 Ok(())
             },
@@ -371,7 +366,7 @@ impl<T: Target> VM<T> {
                 let arg_len = if narg > self.args.len() {
                     0
                 } else {
-                    self.args[narg].len().try_into().expect("Argument is too long")
+                    u32::try_from(self.args[narg].len()).expect("Argument is too long")
                 };
                 self.push(arg_len);
                 Ok(())

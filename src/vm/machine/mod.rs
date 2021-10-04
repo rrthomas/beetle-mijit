@@ -9,10 +9,13 @@ use mijit::code::{
 use UnaryOp::*;
 use BinaryOp::*;
 
-use super::{Registers, AllRegisters, cell_bytes};
+use super::{Registers, AllRegisters};
+
+/** The number of bytes in a cell. */
+pub const CELL: u32 = 4;
 
 /** The number of bits in a word. */
-pub const CELL_BITS: i64 = cell_bytes(8);
+pub const CELL_BITS: u32 = CELL * 8;
 
 //-----------------------------------------------------------------------------
 
@@ -150,7 +153,7 @@ impl code::Machine for Machine {
             let mut b = Builder::new();
             for v in [BA, OPCODE, STACK0, STACK1, LOOP_NEW, LOOP_OLD] {
                 if !live_values.contains(&v) {
-                    b.const64(v, 0xDEADDEADDEADDEADu64 as i64);
+                    b.const64(v, 0xDEADDEADDEADDEADu64);
                 }
             }
             b.store_register(BEP, public_register!(ep));
@@ -190,7 +193,7 @@ impl code::Machine for Machine {
             State::Pick => Switch::new(
                 STACK0,
                 (0..4).map(|u| build(|b| {
-                    b.const_binary(Add, R2, BSP, cell_bytes(i64::from(u) + 1));
+                    b.const_binary(Add, R2, BSP, (u + 1) * CELL);
                     b.load(R2, R2);
                     b.store(R2, BSP);
                 }, Ok(State::Root))).collect(),
@@ -199,10 +202,10 @@ impl code::Machine for Machine {
             State::Roll => Switch::new(
                 STACK0,
                 (0..4).map(|u| build(|b| {
-                    b.const_binary(Add, R5, BSP, cell_bytes(u));
+                    b.const_binary(Add, R5, BSP, u * CELL);
                     b.load(R3, R5);
                     for v in 0..u {
-                        b.const_binary(Add, R4, BSP, cell_bytes(v));
+                        b.const_binary(Add, R4, BSP, v * CELL);
                         b.load(R2, R4);
                         b.store(R3, R4);
                         b.move_(R3, R2);
@@ -224,7 +227,7 @@ impl code::Machine for Machine {
                     b.const_binary(Sub, OPCODE, OPCODE, 0x26); // FIXME: Symbolic constant.
                 }, Ok(State::Divide)),
                 build(|b| {
-                    b.const_(R4, -10); // Division by zero.
+                    b.const_(R4, -10i32 as u32); // Division by zero.
                     b.store(R4, BSP);
                 }, Ok(State::Throw)),
             ),
@@ -364,13 +367,13 @@ impl code::Machine for Machine {
                 b.load(BEP, BEP); // FIXME: Add check that EP is valid.
             }, Ok(State::Next))),
             State::Branchi => Switch::always(build(|b| {
-                b.const_binary(Mul, R2, BA, cell_bytes(1));
+                b.const_binary(Mul, R2, BA, CELL);
                 b.binary(Add, BEP, BEP, R2); // FIXME: Add check that EP is valid.
             }, Ok(State::Next))),
             State::Qbranch => Switch::if_(
                 STACK0,
                 build(|b| {
-                    b.const_binary(Add, BEP, BEP, cell_bytes(1));
+                    b.const_binary(Add, BEP, BEP, CELL);
                 }, Ok(State::Root)),
                 build(|_| {}, Ok(State::Branch)),
             ),
@@ -384,9 +387,9 @@ impl code::Machine for Machine {
                 build(|_| {}, Ok(State::Branch)),
                 build(|b| {
                     // Discard the loop index and limit.
-                    b.const_binary(Add, BRP, BRP, cell_bytes(2));
+                    b.const_binary(Add, BRP, BRP, 2 * CELL);
                     // Add 4 to EP.
-                    b.const_binary(Add, BEP, BEP, cell_bytes(1)); // FIXME: Add check that EP is valid.
+                    b.const_binary(Add, BEP, BEP, CELL); // FIXME: Add check that EP is valid.
                 }, Ok(State::Root)),
             ),
             State::Loopi => Switch::if_(
@@ -394,16 +397,16 @@ impl code::Machine for Machine {
                 build(|_| {}, Ok(State::Branchi)),
                 build(|b| {
                     // Discard the loop index and limit.
-                    b.const_binary(Add, BRP, BRP, cell_bytes(2));
+                    b.const_binary(Add, BRP, BRP, 2 * CELL);
                 }, Ok(State::Next)),
             ),
             State::PloopTest => Switch::if_(
                 OPCODE, // non-zero to exit the loop
                 build(|b| {
                     // Discard the loop index and limit.
-                    b.const_binary(Add, BRP, BRP, cell_bytes(2));
+                    b.const_binary(Add, BRP, BRP, 2 * CELL);
                     // Add 4 to EP.
-                    b.const_binary(Add, BEP, BEP, cell_bytes(1)); // FIXME: Add check that EP is valid.
+                    b.const_binary(Add, BEP, BEP, CELL); // FIXME: Add check that EP is valid.
                 }, Ok(State::Root)),
                 build(|_| {}, Ok(State::Branch)),
             ),
@@ -424,7 +427,7 @@ impl code::Machine for Machine {
                 OPCODE, // non-zero to exit the loop
                 build(|b| {
                     // Discard the loop index and limit.
-                    b.const_binary(Add, BRP, BRP, cell_bytes(2));
+                    b.const_binary(Add, BRP, BRP, 2 * CELL);
                 }, Ok(State::Next)),
                 build(|_| {}, Ok(State::Branchi)),
             ),
@@ -455,7 +458,7 @@ impl code::Machine for Machine {
 
                     // DROP
                     build(|b| {
-                        b.const_binary(Add, BSP, BSP, cell_bytes(1));
+                        b.const_binary(Add, BSP, BSP, CELL);
                     }, Ok(State::Root)),
 
                     // SWAP
@@ -468,7 +471,7 @@ impl code::Machine for Machine {
 
                     // OVER
                     build(|b| {
-                        b.const_binary(Add, R2, BSP, cell_bytes(1));
+                        b.const_binary(Add, R2, BSP, CELL);
                         b.load(R3, R2);
                         b.push(R3, BSP);
                     }, Ok(State::Root)),
@@ -476,10 +479,10 @@ impl code::Machine for Machine {
                     // ROT
                     build(|b| {
                         b.load(R2, BSP);
-                        b.const_binary(Add, R5, BSP, cell_bytes(1));
+                        b.const_binary(Add, R5, BSP, CELL);
                         b.load(R3, R5);
                         b.store(R2, R5);
-                        b.const_binary(Add, R5, BSP, cell_bytes(2));
+                        b.const_binary(Add, R5, BSP, 2 * CELL);
                         b.load(R2, R5);
                         b.store(R3, R5);
                         b.store(R2, BSP);
@@ -488,10 +491,10 @@ impl code::Machine for Machine {
                     // -ROT
                     build(|b| {
                         b.load(R2, BSP);
-                        b.const_binary(Add, R5, BSP, cell_bytes(2));
+                        b.const_binary(Add, R5, BSP, 2 * CELL);
                         b.load(R3, R5);
                         b.store(R2, R5);
-                        b.const_binary(Add, R5, BSP, cell_bytes(1));
+                        b.const_binary(Add, R5, BSP, CELL);
                         b.load(R2, R5);
                         b.store(R3, R5);
                         b.store(R2, BSP);
@@ -500,7 +503,7 @@ impl code::Machine for Machine {
                     // TUCK
                     build(|b| {
                         b.load(R2, BSP);
-                        b.const_binary(Add, R5, BSP, cell_bytes(1));
+                        b.const_binary(Add, R5, BSP, CELL);
                         b.load(R3, R5);
                         b.store(R2, R5);
                         b.store(R3, BSP);
@@ -639,19 +642,19 @@ impl code::Machine for Machine {
 
                     // -1
                     build(|b| {
-                        b.const_(R4, -1);
+                        b.const_(R4, -1i32 as u32);
                         b.push(R4, BSP);
                     }, Ok(State::Root)),
 
                     // CELL
                     build(|b| {
-                        b.const_(R4, cell_bytes(1));
+                        b.const_(R4, CELL);
                         b.push(R4, BSP);
                     }, Ok(State::Root)),
 
                     // -CELL
                     build(|b| {
-                        b.const_(R4, (-Wrapping(cell_bytes(1))).0);
+                        b.const_(R4, (-Wrapping(CELL)).0);
                         b.push(R4, BSP);
                     }, Ok(State::Root)),
 
@@ -696,14 +699,14 @@ impl code::Machine for Machine {
                     // CELL+
                     build(|b| {
                         b.load(R2, BSP);
-                        b.const_binary(Add, R2, R2, cell_bytes(1));
+                        b.const_binary(Add, R2, R2, CELL);
                         b.store(R2, BSP);
                     }, Ok(State::Root)),
 
                     // CELL-
                     build(|b| {
                         b.load(R2, BSP);
-                        b.const_binary(Sub, R2, R2, cell_bytes(1));
+                        b.const_binary(Sub, R2, R2, CELL);
                         b.store(R2, BSP);
                     }, Ok(State::Root)),
 
@@ -755,7 +758,7 @@ impl code::Machine for Machine {
                     // CELLS
                     build(|b| {
                         b.load(R2, BSP);
-                        b.const_binary(Mul, R2, R2, cell_bytes(1));
+                        b.const_binary(Mul, R2, R2, CELL);
                         b.store(R2, BSP);
                     }, Ok(State::Root)),
 
@@ -937,7 +940,7 @@ impl code::Machine for Machine {
 
                     // CALL
                     build(|b| {
-                        b.const_binary(Add, R1, BEP, cell_bytes(1));
+                        b.const_binary(Add, R1, BEP, CELL);
                         b.push(R1, BRP);
                     }, Ok(State::Branch)),
 
@@ -1020,13 +1023,13 @@ impl code::Machine for Machine {
                     // UNLOOP
                     build(|b| {
                         // Discard two items from RP.
-                        b.const_binary(Add, BRP, BRP, cell_bytes(2));
+                        b.const_binary(Add, BRP, BRP, 2 * CELL);
                     }, Ok(State::Root)),
 
                     // J
                     build(|b| {
                         // Push the third item of RP to SP.
-                        b.const_binary(Add, R1, BRP, cell_bytes(2));
+                        b.const_binary(Add, R1, BRP, 2 * CELL);
                         b.load(R4, R1);
                         b.push(R4, BSP);
                     }, Ok(State::Root)),

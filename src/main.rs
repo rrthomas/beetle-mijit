@@ -2,7 +2,7 @@ use clap::{AppSettings, Clap, crate_version, crate_authors};
 use mijit::{target::Target};
 
 pub mod vm;
-use vm::{VM, BeetleExit, DATA_CELLS, RETURN_CELLS, cell_bytes};
+use vm::{VM, BeetleExit, DATA_CELLS, RETURN_CELLS, CELL};
 
 #[derive(Debug)]
 enum LoadObjectError {
@@ -81,19 +81,20 @@ fn load_object<T: Target>(vm: &mut VM<T>, bytes: &[u8]) -> Result<u32, LoadObjec
     let (start, end) = vm.allocate(0);
     assert_eq!(start, end);
 
-    let length = reader.read_ucell(is_be)? as i64;
-    if cell_bytes(length) > end.into() {
+    let length = reader.read_ucell(is_be)?;
+    let length_bytes = length.checked_mul(CELL).ok_or(BadAddress)?;
+    if length_bytes > end {
         return Err(BadAddress);
     }
     for i in 0..length {
-        vm.store(cell_bytes(i) as u32, reader.read_ucell(is_be)?);
+        vm.store(i * CELL, reader.read_ucell(is_be)?);
     }
 
     if reader.peek(1).is_some() {
         return Err(InvalidFile("expected end of file"));
     }
 
-    return Ok(cell_bytes(length) as u32);
+    return Ok(length_bytes);
 }
 
 //-----------------------------------------------------------------------------
