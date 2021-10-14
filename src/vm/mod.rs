@@ -76,15 +76,10 @@ use machine::{State, Trap};
 /** The return type of `VM::run()`. */
 #[derive(Debug)]
 pub enum BeetleExit {
-    Halt,
+    Halt(u32),
     NotImplemented(u8),
     Undefined(u8),
     InvalidLibRoutine(u32),
-    Error(std::io::Error),
-}
-
-impl From<std::io::Error> for BeetleExit {
-    fn from(e: std::io::Error) -> Self { BeetleExit::Error(e) }
 }
 
 //-----------------------------------------------------------------------------
@@ -148,7 +143,7 @@ impl<T: Target> VM<T> {
         vm.registers_mut().rp = rp;
         // Allocate a word to hold a HALT instruction.
         vm.halt_addr = vm.allocate(1).0;
-        vm.store(vm.halt_addr, 0x55);
+        vm.store(vm.halt_addr, 0x5519);
         vm
     }
 
@@ -415,7 +410,8 @@ impl<T: Target> VM<T> {
             let opcode = self.state.opcode as u8;
             match trap {
                 Trap::Halt => {
-                    return (self, BeetleExit::Halt);
+                    let reason = self.pop();
+                    return (self, BeetleExit::Halt(reason));
                 },
                 Trap::NotImplemented => {
                     return (self, BeetleExit::NotImplemented(opcode as u8));
@@ -520,7 +516,7 @@ pub mod tests {
         let entry_address = vm.halt_addr;
         let (new_vm, exit) = unsafe { vm.run(entry_address) };
         vm = new_vm;
-        assert!(matches!(exit, BeetleExit::Halt));
+        assert!(matches!(exit, BeetleExit::Halt(0)));
         assert_eq!(vm.registers().s0, vm.registers().sp);
         assert_eq!(vm.registers().r0, vm.registers().rp);
     }
@@ -534,7 +530,7 @@ pub mod tests {
         vm.rpush(vm.halt_addr);
         let (new_vm, exit) = unsafe { vm.run(0) };
         vm = new_vm;
-        assert!(matches!(exit, BeetleExit::Halt));
+        assert!(matches!(exit, BeetleExit::Halt(0)));
         let result = vm.pop();
         assert_eq!(vm.registers().s0, vm.registers().sp);
         assert_eq!(vm.registers().r0, vm.registers().rp);
@@ -549,13 +545,13 @@ pub mod tests {
     ) {
         let mut vm = VM::new(native(), Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
         vm.registers_mut().throw = vm.halt_addr;
-        vm.store(0, 0x5500 | (opcode as u32));
+        vm.store(0, 0x551900 | (opcode as u32));
         for x in TEST_VALUES {
             println!("Operating on {:x}", x);
             vm.push(x);
             let (new_vm, exit) = unsafe { vm.run(0) };
             vm = new_vm;
-            assert!(matches!(exit, BeetleExit::Halt));
+            assert!(matches!(exit, BeetleExit::Halt(0)));
             let observed = vm.pop();
             assert_eq!(observed, expected(x));
             assert_eq!(vm.registers().s0, vm.registers().sp);
@@ -591,7 +587,7 @@ pub mod tests {
     ) {
         let mut vm = VM::new(native(), Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
         vm.registers_mut().throw = vm.halt_addr;
-        vm.store(0, 0x5500 | (opcode as u32));
+        vm.store(0, 0x551900 | (opcode as u32));
         for x in TEST_VALUES {
             for y in TEST_VALUES {
                 println!("Dividing {:x} by {:x}", x, y);
@@ -599,7 +595,7 @@ pub mod tests {
                 vm.push(y);
                 let (new_vm, exit) = unsafe { vm.run(0) };
                 vm = new_vm;
-                assert!(matches!(exit, BeetleExit::Halt));
+                assert!(matches!(exit, BeetleExit::Halt(0)));
                 if y != 0 {
                     // Division should work.
                     for z in expected(x, y) {

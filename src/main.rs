@@ -136,8 +136,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (new_vm, exit) = unsafe { vm.run(0) };
     let vm = new_vm;
     match exit {
-        BeetleExit::Halt => {
-            Ok(())
+        BeetleExit::Halt(reason) => {
+            if reason == 0 {
+                Ok(())
+            } else {
+                unsafe {libc::exit(reason as i32)};
+            }
         },
         BeetleExit::NotImplemented(opcode) => {
             println!("{:#?}", vm);
@@ -150,9 +154,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         BeetleExit::InvalidLibRoutine(routine) => {
             println!("{:#?}", vm);
             panic!("LIB routine {:#x} is not implemented", routine);
-        },
-        BeetleExit::Error(error) => {
-            Err(error.into())
         },
     }
 }
