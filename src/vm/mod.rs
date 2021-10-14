@@ -96,7 +96,7 @@ type Jit = jit::Jit<Machine, Native>;
 
 pub struct VM {
     /** The compiled code, registers, and other compiler state. */
-    jit: Jit,
+    jit: Option<Jit>,
     /** The command-line arguments passed to Beetle. */
     args: Box<[CString]>,
     /** The Beetle state (other than the memory). */
@@ -125,7 +125,7 @@ impl VM {
         return_cells: u32,
     ) -> Self {
         let mut vm = VM {
-            jit: jit::Jit::new(&Machine, native()),
+            jit: Some(jit::Jit::new(&Machine, native())),
             args: args,
             state: AllRegisters::default(),
             memory: vec![0; memory_cells as usize],
@@ -394,38 +394,33 @@ impl VM {
         }
     }
 
-    /**
-     * Run the code at address `ep`.
-     *
-     * # Safety
-     *
-     * This will crash if the code is compiled for the wrong [`Target`].
-     */
-    pub unsafe fn run(mut self, ep: u32) -> (Self, BeetleExit) {
+    /** Run the code at address `ep`. */
+    pub fn run(&mut self, ep: u32) -> BeetleExit {
         assert!(Self::is_aligned(ep));
         self.registers_mut().ep = ep;
         self.state.m0 = self.memory.as_mut_ptr() as u64;
-        *self.jit.global_mut(Global(0)) = Word {mp: (&mut self.state as *mut AllRegisters).cast()};
         loop {
-            let (jit, trap) = self.jit.execute(&State::Root).expect("Execute failed");
-            self.jit = jit;
+            let mut jit = self.jit.take().expect("Trying to call run() after error");
+            *jit.global_mut(Global(0)) = Word {mp: (&mut self.state as *mut AllRegisters).cast()};
+            let (jit, trap) = unsafe {jit.execute(&State::Root)}.expect("Execute failed");
+            self.jit = Some(jit);
             let opcode = self.state.opcode as u8;
             match trap {
                 Trap::Halt => {
                     let reason = self.pop();
-                    return (self, BeetleExit::Halt(reason));
+                    return BeetleExit::Halt(reason);
                 },
                 Trap::NotImplemented => {
-                    return (self, BeetleExit::NotImplemented(opcode as u8));
+                    return BeetleExit::NotImplemented(opcode as u8);
                 },
                 Trap::Lib => {
                     let routine = self.pop();
                     if let Err(error) = self.lib(routine) {
-                        return (self, error);
+                        return error;
                     }
                 },
                 Trap::Undefined => {
-                    return (self, BeetleExit::Undefined(opcode as u8));
+                    return BeetleExit::Undefined(opcode as u8);
                 }
             }
         }
@@ -514,8 +509,7 @@ pub mod tests {
     pub fn halt() {
         let mut vm = VM::new(Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
         let entry_address = vm.halt_addr;
-        let (new_vm, exit) = unsafe { vm.run(entry_address) };
-        vm = new_vm;
+        let exit = vm.run(entry_address);
         assert!(matches!(exit, BeetleExit::Halt(0)));
         assert_eq!(vm.registers().s0, vm.registers().sp);
         assert_eq!(vm.registers().r0, vm.registers().rp);
@@ -528,8 +522,7 @@ pub mod tests {
         vm.push(3);
         vm.push(5);
         vm.rpush(vm.halt_addr);
-        let (new_vm, exit) = unsafe { vm.run(0) };
-        vm = new_vm;
+        let exit = vm.run(0);
         assert!(matches!(exit, BeetleExit::Halt(0)));
         let result = vm.pop();
         assert_eq!(vm.registers().s0, vm.registers().sp);
@@ -549,8 +542,7 @@ pub mod tests {
         for x in TEST_VALUES {
             println!("Operating on {:x}", x);
             vm.push(x);
-            let (new_vm, exit) = unsafe { vm.run(0) };
-            vm = new_vm;
+            let exit = vm.run(0);
             assert!(matches!(exit, BeetleExit::Halt(0)));
             let observed = vm.pop();
             assert_eq!(observed, expected(x));
@@ -593,8 +585,7 @@ pub mod tests {
                 println!("Dividing {:x} by {:x}", x, y);
                 vm.push(x);
                 vm.push(y);
-                let (new_vm, exit) = unsafe { vm.run(0) };
-                vm = new_vm;
+                let exit = vm.run(0);
                 assert!(matches!(exit, BeetleExit::Halt(0)));
                 if y != 0 {
                     // Division should work.

@@ -131,9 +131,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         RETURN_CELLS,
     );
     load_object(&mut vm, &std::fs::read(opts.object_file)?)?;
-    let (new_vm, exit) = unsafe { vm.run(0) };
-    let vm = new_vm;
-    match exit {
+    match vm.run(0) {
         BeetleExit::Halt(reason) => {
             if reason == 0 {
                 Ok(())
