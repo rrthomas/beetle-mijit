@@ -28,14 +28,7 @@ const AM_REGISTER: code::AliasMask = code::AliasMask(0x2);
  * Beetle addresses to native addresses. `push()` and `pop()` access Beetle
  * stacks (the native stack is not used).
  *
- * Example:
- * ```
- * let mut b = Builder::new();
- * b.add_slots(NUM_SLOTS);
- * b.load_register(BEP, public_register!(ep));
- * // ...more code...
- * b.finish()
- * ```
+ * For examples, see tests.
  */
 pub struct Builder(Vec<Action>);
 
@@ -209,20 +202,7 @@ impl Builder {
 /**
  * Build a [`Case`], in the form that `Machine::code()` returns.
  *
- * Example:
- * ```
- * Switch::if_(
- *     OPCODE, // `Ult(STACK0, CELL_BITS)`
- *     build(|b| {
- *         b.binary(Lsl, R2, STACK0, STACK1);
- *         b.store(R2, BSP);
- *     }, Ok(State::Root)),
- *     build(|b| {
- *         b.const_(R2, 0);
- *         b.store(R2, BSP);
- *     }, Ok(State::Root)),
- * )
- * ```
+ * For examples, see tests.
  */
 pub fn build(
     callback: impl FnOnce(&mut Builder),
@@ -234,3 +214,36 @@ pub fn build(
 }
 
 //-----------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use mijit::code::{Switch};
+    use super::super::{R2, R3, OPCODE, BEP, BSP};
+
+    /** Illustrate [`Builder`]. */
+    #[test]
+    fn builder() {
+        let mut b = Builder::new();
+        b.load_register(BEP, 16);
+        // ...more code...
+        let _ = b.finish();
+    }
+
+    /** Illustrate [`build()`]. */
+    #[test]
+    fn build() {
+        let _ = Switch::if_(
+            OPCODE.into(), // `Ult(R2, CELL_BITS)`
+            super::build(|b| {
+                b.binary(Lsl, R2, R3, R2);
+                b.store(R2, BSP);
+            }, Ok(State::Root)),
+            super::build(|b| {
+                b.const_(R2, 0);
+                b.store(R2, BSP);
+            }, Ok(State::Root)),
+        );
+    }
+}
