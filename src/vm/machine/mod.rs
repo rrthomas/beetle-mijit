@@ -131,7 +131,7 @@ impl code::Machine for Machine {
             b.load_register(BA, public_register!(a));
             b.load_register(BSP, public_register!(sp));
             b.load_register(BRP, public_register!(rp));
-            b.load_register64(M0, private_register!(m0));
+            b.load_register64(M0, public_register!(m0));
             b.load_register(OPCODE, private_register!(opcode));
             b.load_register(R2, private_register!(r2));
             b.load_register(R3, private_register!(r3));
@@ -148,7 +148,7 @@ impl code::Machine for Machine {
             b.store_register(BA, public_register!(a));
             b.store_register(BSP, public_register!(sp));
             b.store_register(BRP, public_register!(rp));
-            b.store_register64(M0, private_register!(m0));
+            b.store_register64(M0, public_register!(m0));
             b.store_register(OPCODE, private_register!(opcode));
             b.store_register(R2, private_register!(r2));
             b.store_register(R3, private_register!(r3));

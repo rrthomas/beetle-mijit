@@ -11,6 +11,7 @@ use mijit::code::{Global};
 pub struct Registers {
     pub ep: u32,
     pub a: u32,
+    pub m0: u64,
     pub memory: u32,
     pub sp: u32,
     pub rp: u32,
@@ -47,7 +48,6 @@ impl std::fmt::Debug for Registers {
 #[derive(Default)]
 struct AllRegisters {
     public: Registers,
-    m0: u64,
     opcode: u32,
     r2: u32,
     r3: u32,
@@ -57,7 +57,7 @@ impl std::fmt::Debug for AllRegisters {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         f.debug_struct("AllRegisters")
             .field("public", &self.public)
-            .field("m0", &format!("{:#x}", self.m0))
+            .field("m0", &format!("{:#x}", self.public.m0))
             .field("opcode", &format!("{:#x}", self.opcode))
             .field("r2", &format!("{:#x}", self.r2))
             .field("r3", &format!("{:#x}", self.r3))
@@ -259,7 +259,7 @@ impl VM {
     pub fn native_address_of_range(&mut self, start: u32, length: u32) -> Option<*mut libc::c_void> {
         start.checked_add(length).and_then(|end| {
             if ((end >> 2) as usize) < self.memory.len() {
-                Some((self.state.m0 + (start as u64)) as *mut libc::c_void)
+                Some((self.state.public.m0 + (start as u64)) as *mut libc::c_void)
             } else {
                 None
             }
@@ -398,7 +398,7 @@ impl VM {
     pub fn run(&mut self, ep: u32) -> BeetleExit {
         assert!(Self::is_aligned(ep));
         self.registers_mut().ep = ep;
-        self.state.m0 = self.memory.as_mut_ptr() as u64;
+        self.state.public.m0 = self.memory.as_mut_ptr() as u64;
         loop {
             let mut jit = self.jit.take().expect("Trying to call run() after error");
             *jit.global_mut(Global(0)) = Word {mp: (&mut self.state as *mut AllRegisters).cast()};
