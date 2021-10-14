@@ -1,3 +1,4 @@
+use std::ffi::{CString};
 use clap::{AppSettings, Clap, crate_version, crate_authors};
 use mijit::{target::Target};
 
@@ -121,9 +122,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts: Opts = Opts::parse();
     let mut argv = vec![opts.object_file.clone()];
     argv.extend(opts.args);
+    let argv: Result<Box<[CString]>, _> = argv.into_iter()
+        .map(|s| CString::new(s))
+        .collect();
     let mut vm = VM::new(
         mijit::target::native(),
-        argv.into(),
+        argv?,
         opts.memory_cells,
         DATA_CELLS,
         RETURN_CELLS,

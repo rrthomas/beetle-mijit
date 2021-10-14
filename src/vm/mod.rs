@@ -1,5 +1,6 @@
 use std::convert::{TryFrom};
 use libc::{c_int};
+use std::ffi::{CString};
 use mijit::target::{Target, Word};
 use mijit::{jit};
 use mijit::code::{Global};
@@ -99,7 +100,7 @@ pub struct VM<T: Target> {
     /** The compiled code, registers, and other compiler state. */
     jit: jit::Jit<Machine, T>,
     /** The command-line arguments passed to Beetle. */
-    args: Box<[String]>,
+    args: Box<[CString]>,
     /** The Beetle state (other than the memory). */
     state: AllRegisters,
     /** The Beetle memory. */
@@ -121,7 +122,7 @@ impl<T: Target> VM<T> {
      */
     pub fn new(
         target: T,
-        args: Box<[String]>,
+        args: Box<[CString]>,
         memory_cells: u32,
         data_cells: u32,
         return_cells: u32,
@@ -362,7 +363,7 @@ impl<T: Target> VM<T> {
                 let arg_len = if narg > self.args.len() {
                     0
                 } else {
-                    u32::try_from(self.args[narg].len()).expect("Argument is too long")
+                    u32::try_from(self.args[narg].as_bytes().len()).expect("Argument is too long")
                 };
                 self.push(arg_len);
                 Ok(())
