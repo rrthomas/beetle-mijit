@@ -1,7 +1,7 @@
 use std::convert::{TryFrom};
 use libc::{c_int};
 use std::ffi::{CString};
-use mijit::target::{Target, Word};
+use mijit::target::{Native, native, Word};
 use mijit::{jit};
 use mijit::code::{Global};
 
@@ -91,9 +91,12 @@ pub const DATA_CELLS: u32 = 1 << 18;
 /** The suggested size of the Beetle return stack, in cells. */
 pub const RETURN_CELLS: u32 = 1 << 18;
 
-pub struct VM<T: Target> {
+/** The type of VM::jit. */
+type Jit = jit::Jit<Machine, Native>;
+
+pub struct VM {
     /** The compiled code, registers, and other compiler state. */
-    jit: jit::Jit<Machine, T>,
+    jit: Jit,
     /** The command-line arguments passed to Beetle. */
     args: Box<[CString]>,
     /** The Beetle state (other than the memory). */
@@ -106,7 +109,7 @@ pub struct VM<T: Target> {
     halt_addr: u32,
 }
 
-impl<T: Target> VM<T> {
+impl VM {
     /**
      * Constructs a Beetle virtual machine with the specified parameters.
      *
@@ -116,14 +119,13 @@ impl<T: Target> VM<T> {
      * are free for the program's use.
      */
     pub fn new(
-        target: T,
         args: Box<[CString]>,
         memory_cells: u32,
         data_cells: u32,
         return_cells: u32,
     ) -> Self {
         let mut vm = VM {
-            jit: jit::Jit::new(&Machine, target),
+            jit: jit::Jit::new(&Machine, native()),
             args: args,
             state: AllRegisters::default(),
             memory: vec![0; memory_cells as usize],
@@ -436,7 +438,7 @@ impl<T: Target> VM<T> {
     }
 }
 
-impl<T: Target> std::fmt::Debug for VM<T> {
+impl std::fmt::Debug for VM {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         self.state.fmt(f)
     }
@@ -447,8 +449,6 @@ impl<T: Target> std::fmt::Debug for VM<T> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-
-    use mijit::target::{native};
 
     pub const TEST_VALUES: [u32; 10] = [
         0x00000000,
@@ -512,7 +512,7 @@ pub mod tests {
 
     #[test]
     pub fn halt() {
-        let mut vm = VM::new(native(), Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        let mut vm = VM::new(Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
         let entry_address = vm.halt_addr;
         let (new_vm, exit) = unsafe { vm.run(entry_address) };
         vm = new_vm;
@@ -523,7 +523,7 @@ pub mod tests {
 
     #[test]
     pub fn ackermann() {
-        let mut vm = VM::new(native(), Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        let mut vm = VM::new(Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
         vm.load_object(ackermann_object().as_ref());
         vm.push(3);
         vm.push(5);
@@ -543,7 +543,7 @@ pub mod tests {
         opcode: u8,
         expected: fn(u32) -> u32,
     ) {
-        let mut vm = VM::new(native(), Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        let mut vm = VM::new(Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
         vm.registers_mut().throw = vm.halt_addr;
         vm.store(0, 0x551900 | (opcode as u32));
         for x in TEST_VALUES {
@@ -585,7 +585,7 @@ pub mod tests {
         opcode: u8,
         expected: fn(u32, u32) -> Vec<u32>,
     ) {
-        let mut vm = VM::new(native(), Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        let mut vm = VM::new(Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
         vm.registers_mut().throw = vm.halt_addr;
         vm.store(0, 0x551900 | (opcode as u32));
         for x in TEST_VALUES {

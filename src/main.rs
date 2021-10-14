@@ -1,6 +1,5 @@
 use std::ffi::{CString};
 use clap::{AppSettings, Clap, crate_version, crate_authors};
-use mijit::{target::Target};
 
 pub mod vm;
 use vm::{VM, BeetleExit, DATA_CELLS, RETURN_CELLS, CELL};
@@ -23,7 +22,7 @@ impl std::fmt::Display for LoadObjectError {
  * Loads an object file at address 0; on success, returns the next free
  * address.
  */
-fn load_object<T: Target>(vm: &mut VM<T>, bytes: &[u8]) -> Result<u32, LoadObjectError> {
+fn load_object(vm: &mut VM, bytes: &[u8]) -> Result<u32, LoadObjectError> {
     use LoadObjectError::*;
     const MAGIC: &[u8] = b"BEETLE\0";
 
@@ -126,7 +125,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|s| CString::new(s))
         .collect();
     let mut vm = VM::new(
-        mijit::target::native(),
         argv?,
         opts.memory_cells,
         DATA_CELLS,
