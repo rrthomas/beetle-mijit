@@ -1,5 +1,5 @@
 use std::ffi::{CString};
-use clap::{AppSettings, Clap, crate_version, crate_authors};
+use clap::{Parser, crate_version, crate_authors};
 
 pub mod vm;
 use vm::{VM, BeetleExit, DATA_CELLS, RETURN_CELLS, CELL};
@@ -99,9 +99,8 @@ fn load_object(vm: &mut VM, bytes: &[u8]) -> Result<u32, LoadObjectError> {
 
 //-----------------------------------------------------------------------------
 
-#[derive(Debug, Clap)]
+#[derive(Debug, Parser)]
 #[clap(version = crate_version!(), author = crate_authors!())]
-#[clap(setting = AppSettings::ColoredHelp)]
 struct Opts {
     /** Set memory size to the given NUMBER of cells. 0 < NUMBER <= 1073741824. */
     #[clap(short, long, value_name="NUMBER", default_value="1048576")]
