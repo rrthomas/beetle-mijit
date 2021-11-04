@@ -1,5 +1,5 @@
 [package]
-name = "beetle-mijit"
+name = "mijit-beetle"
 authors = ["Reuben Thomas", "Alistair Turnbull"]
 version = "0.1.0"
 edition = "2021"
