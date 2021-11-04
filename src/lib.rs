@@ -39,7 +39,7 @@ pub unsafe extern fn beetle_new(
 
 /** Frees a Buffer. */
 #[no_mangle]
-pub extern fn beetle_drop(_buffer: Box<VM>) {}
+pub extern fn beetle_drop(_vm: Box<VM>) {}
 
 /** Read or write the public registers. */
 #[no_mangle]
