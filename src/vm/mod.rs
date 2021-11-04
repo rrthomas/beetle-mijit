@@ -424,7 +424,6 @@ impl VM {
                 }
             }
         }
-        
     }
 
     /** Indicate whether an address is cell-aligned. */
