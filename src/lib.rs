@@ -22,7 +22,7 @@ unsafe fn char_array_array_to_vec(array: *const *const c_char) -> Vec<CString> {
 
 /** Allocates a new VM. */
 #[no_mangle]
-pub unsafe extern fn beetle_new(
+pub unsafe extern fn mijit_beetle_new(
     argv: *const *const c_char,
     memory_cells: u32,
     data_cells: u32,
@@ -39,17 +39,17 @@ pub unsafe extern fn beetle_new(
 
 /** Frees a Buffer. */
 #[no_mangle]
-pub extern fn beetle_drop(_vm: Box<VM>) {}
+pub extern fn mijit_beetle_drop(_vm: Box<VM>) {}
 
 /** Read or write the public registers. */
 #[no_mangle]
-pub extern fn registers_mut(vm: &mut VM) -> &mut Registers { vm.registers_mut() }
+pub extern fn mijit_beetle_registers_mut(vm: &mut VM) -> &mut Registers { vm.registers_mut() }
 
 /**
  * Run the code at address `ep`.
  */
 #[no_mangle]
-pub unsafe extern fn run(vm: &mut VM, ep: u32) -> c_int {
+pub unsafe extern fn mijit_beetle_run(vm: &mut VM, ep: u32) -> c_int {
     use BeetleExit::*;
     match vm.run(ep) {
         Halt(reason) => reason as c_int,

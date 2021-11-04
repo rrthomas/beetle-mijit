@@ -13,9 +13,9 @@
 
 #include <stdint.h>
 
-typedef struct VM VM;
+typedef struct mijit_beetle_VM mijit_beetle_VM;
 
-typedef struct Registers {
+typedef struct mijit_beetle_Registers {
     uint32_t ep;
     uint32_t a;
     uint64_t m0;
@@ -27,9 +27,9 @@ typedef struct Registers {
     uint32_t throw;
     uint32_t bad;
     uint32_t not_address;
-} Registers;
+} mijit_beetle_Registers;
 
-VM *beetle_new(
+mijit_beetle_VM *mijit_beetle_new(
     const char * const *argv,
     uint32_t memory_cells, 
     uint32_t data_cells,
@@ -37,10 +37,10 @@ VM *beetle_new(
 );
 
 
-void beetle_drop(VM *vm);
+void mijit_beetle_drop(mijit_beetle_VM *vm);
 
-Registers *registers_mut(VM *vm);
+mijit_beetle_Registers *mijit_beetle_registers_mut(mijit_beetle_VM *vm);
 
-int run(VM *vm, uint32_t ep);
+int mijit_beetle_run(mijit_beetle_VM *vm, uint32_t ep);
 
 #endif
