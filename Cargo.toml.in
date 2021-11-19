@@ -1,7 +1,7 @@
 [package]
-name = "mijit-beetle"
+name = "@PACKAGE@"
 authors = ["Reuben Thomas", "Alistair Turnbull"]
-version = "0.1.0"
+version = "@VERSION@"
 edition = "2021"
 rust-version = "1.56"
 build = "build.rs"

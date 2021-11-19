@@ -1,5 +1,16 @@
 *~
+/aclocal.m4
+/autom4te.cache
+/build-aux
+/config.log
+/config.status
+/configure
+/libtool
+/m4
+/Makefile.in
+/Makefile
 /target
 **/*.rs.bk
 .gdb_history
 Cargo.lock
+Cargo.toml
