@@ -30,7 +30,6 @@ typedef struct mijit_beetle_Registers {
 } mijit_beetle_Registers;
 
 mijit_beetle_VM *mijit_beetle_new(
-    const char * const *argv,
     uint32_t memory_cells, 
     uint32_t data_cells,
     uint32_t return_cells

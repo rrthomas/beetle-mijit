@@ -1,4 +1,3 @@
-use std::ffi::{CString};
 use clap::{Parser, crate_version, crate_authors};
 
 pub mod vm;
@@ -118,13 +117,7 @@ struct Opts {
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts: Opts = Opts::parse();
-    let mut argv = vec![opts.object_file.clone()];
-    argv.extend(opts.args);
-    let argv: Result<Box<[CString]>, _> = argv.into_iter()
-        .map(|s| CString::new(s))
-        .collect();
     let mut vm = VM::new(
-        argv?,
         opts.memory_cells,
         DATA_CELLS,
         RETURN_CELLS,
@@ -146,9 +139,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("{:#?}", vm);
             panic!("Opcode {:#x} is undefined", opcode);
         },
-        BeetleExit::InvalidLibRoutine(routine) => {
-            println!("{:#?}", vm);
-            panic!("LIB routine {:#x} is not implemented", routine);
+        BeetleExit::Lib => {
+            panic!("LIB instruction is not implemented");
         },
     }
 }

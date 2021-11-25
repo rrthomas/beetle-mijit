@@ -1,6 +1,3 @@
-use std::convert::{TryFrom};
-use libc::{c_int};
-use std::ffi::{CString};
 use mijit::target::{Native, native, Word};
 use mijit::{jit};
 use mijit::code::{Global};
@@ -79,7 +76,7 @@ pub enum BeetleExit {
     Halt(u32),
     NotImplemented(u8),
     Undefined(u8),
-    InvalidLibRoutine(u32),
+    Lib,
 }
 
 //-----------------------------------------------------------------------------
@@ -97,8 +94,6 @@ type Jit = jit::Jit<Machine, Native>;
 pub struct VM {
     /** The compiled code, registers, and other compiler state. */
     jit: Option<Jit>,
-    /** The command-line arguments passed to Beetle. */
-    args: Box<[CString]>,
     /** The Beetle state (other than the memory). */
     state: AllRegisters,
     /** The Beetle memory. */
@@ -119,14 +114,12 @@ impl VM {
      * are free for the program's use.
      */
     pub fn new(
-        args: Box<[CString]>,
         memory_cells: u32,
         data_cells: u32,
         return_cells: u32,
     ) -> Self {
         let mut vm = VM {
             jit: Some(jit::Jit::new(&Machine, native())),
-            args: args,
             state: AllRegisters::default(),
             memory: vec![0; memory_cells as usize],
             free_cells: memory_cells,
@@ -266,163 +259,22 @@ impl VM {
         })
     }
 
-    /** Runs LIB routine `routine`. */
-    pub fn lib(&mut self, routine: u32) -> Result<(), BeetleExit> {
-        match routine {
-            4 => { // OPEN-FILE.
-                let perm = self.pop();
-                let len = self.pop();
-                let str_ = self.pop();
-                // Decode `perm` into `flags` and `binary`.
-                let mut flags = [
-                    libc::O_RDONLY,
-                    libc::O_WRONLY,
-                    libc::O_RDWR,
-                    0,
-                ][(perm & 3) as usize];
-                if perm & 4 != 0 {
-                    flags |= libc::O_CREAT | libc::O_TRUNC;
-                }
-                let binary = perm & 8 != 0;
-                // Open the file.
-                let filename = self.get_str(str_, len);
-                let fd = unsafe {libc::open(
-                    filename.as_ptr() as *const libc::c_char,
-                    flags,
-                    libc::S_IRUSR | libc::S_IWUSR | libc::S_IRGRP | libc::S_IWGRP | libc::S_IROTH | libc::S_IWOTH,
-                )};
-                let result: c_int = if fd < 0 {
-                    -1
-                } else if binary {
-                    // FIXME: Don't know how to open in binary mode.
-                    // For now, assume it is already binary.
-                    0
-                } else {
-                    0
-                };
-                self.push(fd as u32);
-                self.push(result as u32);
-                Ok(())
-            },
-            5 => { // CLOSE-FILE.
-                let fd = self.pop() as c_int;
-                self.push(unsafe {libc::close(fd)} as u32);
-                Ok(())
-            },
-            6 => { // READ-FILE.
-                let fd = self.pop() as c_int;
-                let nbytes = self.pop();
-                let buf = self.pop();
-                let mut result: isize = 0;
-                let mut exception = true;
-                if let Some(native_buf) = self.native_address_of_range(buf, nbytes) {
-                    // FIXME: `pre_dma()` and `post_dma()`.
-                    result = unsafe {libc::read(fd, native_buf, nbytes as usize)};
-                    exception &= result < 0;
-                }
-                self.push(i32::try_from(result).expect("Too many bytes read") as u32);
-                self.push(if exception { !0 } else { 0 });
-                Ok(())
-            },
-            7 => { // WRITE-FILE.
-                let fd = self.pop() as c_int;
-                let nbytes = self.pop();
-                let buf = self.pop();
-                let mut exception = true;
-                if let Some(native_buf) = self.native_address_of_range(buf, nbytes) {
-                    // FIXME: `pre_dma()` and `post_dma()`.
-                    let result = unsafe {libc::write(fd, native_buf, nbytes as usize)};
-                    exception &= result < 0;
-                }
-                self.push(if exception { !0 } else { 0 });
-                Ok(())
-            },
-            8 => { // FILE-POSITION.
-                let fd = self.pop() as c_int;
-                let result = unsafe {libc::lseek(fd, 0, libc::SEEK_CUR)};
-                self.push_double(result as u64);
-                self.push(if result < 0 { !0 } else { 0 });
-                Ok(())
-            },
-            9 => { // REPOSITION-FILE.
-                let fd = self.pop() as c_int;
-                let pos = self.pop_double() as libc::off_t;
-                let result = unsafe {libc::lseek(fd, pos, libc::SEEK_SET)};
-                self.push(if result < 0 { !0 } else { 0 });
-                Ok(())
-            },
-            16 => { // ARGC.
-                self.push(self.args.len() as u32);
-                Ok(())
-            },
-            17 => { // ARGLEN.
-                let narg = self.pop() as usize;
-                let arg_len = if narg > self.args.len() {
-                    0
-                } else {
-                    u32::try_from(self.args[narg].as_bytes().len()).expect("Argument is too long")
-                };
-                self.push(arg_len);
-                Ok(())
-            },
-            18 => { // ARGCOPY.
-                let addr = self.pop();
-                let narg = self.pop() as usize;
-                let arg = self.args[narg].clone();
-                if narg < self.args.len() {
-                    for (i, &b) in arg.as_bytes().iter().enumerate() {
-                        self.store_byte(addr + i as u32, b);
-                    }
-                }
-                Ok(())
-            },
-            19 => { // STDIN.
-                self.push(libc::STDIN_FILENO as u32);
-                Ok(())
-            },
-            20 => { // STDOUT.
-                self.push(libc::STDIN_FILENO as u32);
-                Ok(())
-            },
-            21 => { // STDERR.
-                self.push(libc::STDIN_FILENO as u32);
-                Ok(())
-            },
-            _ => {
-                Err(BeetleExit::InvalidLibRoutine(routine))
-            },
-        }
-    }
 
     /** Run the code at address `ep`. */
     pub fn run(&mut self, ep: u32) -> BeetleExit {
         assert!(Self::is_aligned(ep));
         self.registers_mut().ep = ep;
         self.state.public.m0 = self.memory.as_mut_ptr() as u64;
-        loop {
-            let mut jit = self.jit.take().expect("Trying to call run() after error");
-            *jit.global_mut(Global(0)) = Word {mp: (&mut self.state as *mut AllRegisters).cast()};
-            let (jit, trap) = unsafe {jit.execute(&State::Root)}.expect("Execute failed");
-            self.jit = Some(jit);
-            let opcode = self.state.opcode as u8;
-            match trap {
-                Trap::Halt => {
-                    let reason = self.pop();
-                    return BeetleExit::Halt(reason);
-                },
-                Trap::NotImplemented => {
-                    return BeetleExit::NotImplemented(opcode as u8);
-                },
-                Trap::Lib => {
-                    let routine = self.pop();
-                    if let Err(error) = self.lib(routine) {
-                        return error;
-                    }
-                },
-                Trap::Undefined => {
-                    return BeetleExit::Undefined(opcode as u8);
-                }
-            }
+        let mut jit = self.jit.take().expect("Trying to call run() after error");
+        *jit.global_mut(Global(0)) = Word {mp: (&mut self.state as *mut AllRegisters).cast()};
+        let (jit, trap) = unsafe {jit.execute(&State::Root)}.expect("Execute failed");
+        self.jit = Some(jit);
+        let opcode = self.state.opcode as u8;
+        match trap {
+            Trap::Halt => BeetleExit::Halt(self.pop()),
+            Trap::NotImplemented => BeetleExit::NotImplemented(opcode as u8),
+            Trap::Lib => BeetleExit::Lib,
+            Trap::Undefined => BeetleExit::Undefined(opcode as u8),
         }
     }
 
