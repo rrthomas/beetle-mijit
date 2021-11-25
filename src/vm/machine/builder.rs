@@ -220,7 +220,7 @@ mod tests {
     use super::*;
 
     use mijit::code::{Switch};
-    use super::super::{R2, R3, OPCODE, BEP, BSP};
+    use super::super::{R2, R3, BI, BEP, BSP};
 
     /** Illustrate [`Builder`]. */
     #[test]
@@ -235,7 +235,7 @@ mod tests {
     #[test]
     fn build() {
         let _ = Switch::if_(
-            OPCODE.into(), // `Ult(R2, CELL_BITS)`
+            BI.into(), // `Ult(R2, CELL_BITS)`
             super::build(|b| {
                 b.binary(Lsl, R2, R3, R2);
                 b.store(R2, BSP);

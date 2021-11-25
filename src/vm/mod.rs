@@ -7,8 +7,8 @@ use mijit::code::{Global};
 #[derive(Default)]
 pub struct Registers {
     pub ep: u32,
+    pub i: u32,
     pub a: u32,
-    pub m0: u64,
     pub memory: u32,
     pub sp: u32,
     pub rp: u32,
@@ -23,6 +23,7 @@ impl std::fmt::Debug for Registers {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         f.debug_struct("Registers")
             .field("ep", &format!("{:#x}", self.ep))
+            .field("i", &format!("{:#x}", self.i))
             .field("a", &format!("{:#x}", self.a))
             .field("memory", &format!("{:#x}", self.memory))
             .field("sp", &format!("{:#x}", self.sp))
@@ -45,7 +46,7 @@ impl std::fmt::Debug for Registers {
 #[derive(Default)]
 struct AllRegisters {
     public: Registers,
-    opcode: u32,
+    m0: u64,
     r2: u32,
     r3: u32,
 }
@@ -54,8 +55,7 @@ impl std::fmt::Debug for AllRegisters {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         f.debug_struct("AllRegisters")
             .field("public", &self.public)
-            .field("m0", &format!("{:#x}", self.public.m0))
-            .field("opcode", &format!("{:#x}", self.opcode))
+            .field("m0", &format!("{:#x}", self.m0))
             .field("r2", &format!("{:#x}", self.r2))
             .field("r3", &format!("{:#x}", self.r3))
             .finish()
@@ -147,6 +147,9 @@ impl VM {
 
     /** Read or write the public registers. */
     pub fn registers_mut(&mut self) -> &mut Registers { &mut self.state.public }
+
+    /** Read the `M0` register. */
+    pub fn memory(&self) -> &[u32] { &self.memory }
 
     /**
      * Allocate `cells` cells and return a (start, end) Beetle pointer pair.
@@ -245,31 +248,16 @@ impl VM {
         item
     }
 
-    /**
-     * Checks that the interval `start..(start+length)` fits in Beetle's memory,
-     * and returns a native pointer to it.
-     */
-    pub fn native_address_of_range(&mut self, start: u32, length: u32) -> Option<*mut libc::c_void> {
-        start.checked_add(length).and_then(|end| {
-            if ((end >> 2) as usize) < self.memory.len() {
-                Some((self.state.public.m0 + (start as u64)) as *mut libc::c_void)
-            } else {
-                None
-            }
-        })
-    }
-
-
     /** Run the code at address `ep`. */
     pub fn run(&mut self, ep: u32) -> BeetleExit {
         assert!(Self::is_aligned(ep));
         self.registers_mut().ep = ep;
-        self.state.public.m0 = self.memory.as_mut_ptr() as u64;
+        self.state.m0 = self.memory.as_mut_ptr() as u64;
         let mut jit = self.jit.take().expect("Trying to call run() after error");
         *jit.global_mut(Global(0)) = Word {mp: (&mut self.state as *mut AllRegisters).cast()};
         let (jit, trap) = unsafe {jit.execute(&State::Root)}.expect("Execute failed");
         self.jit = Some(jit);
-        let opcode = self.state.opcode as u8;
+        let opcode = self.registers_mut().i as u8;
         match trap {
             Trap::Halt => BeetleExit::Halt(self.pop()),
             Trap::NotImplemented => BeetleExit::NotImplemented(opcode as u8),
@@ -358,7 +346,7 @@ pub mod tests {
 
     #[test]
     pub fn halt() {
-        let mut vm = VM::new(Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        let mut vm = VM::new(MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
         let entry_address = vm.halt_addr;
         let exit = vm.run(entry_address);
         assert!(matches!(exit, BeetleExit::Halt(0)));
@@ -368,7 +356,7 @@ pub mod tests {
 
     #[test]
     pub fn ackermann() {
-        let mut vm = VM::new(Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        let mut vm = VM::new(MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
         vm.load_object(ackermann_object().as_ref());
         vm.push(3);
         vm.push(5);
@@ -387,7 +375,7 @@ pub mod tests {
         opcode: u8,
         expected: fn(u32) -> u32,
     ) {
-        let mut vm = VM::new(Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        let mut vm = VM::new(MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
         vm.registers_mut().throw = vm.halt_addr;
         vm.store(0, 0x551900 | (opcode as u32));
         for x in TEST_VALUES {
@@ -428,7 +416,7 @@ pub mod tests {
         opcode: u8,
         expected: fn(u32, u32) -> Vec<u32>,
     ) {
-        let mut vm = VM::new(Box::new([]), MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+        let mut vm = VM::new(MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
         vm.registers_mut().throw = vm.halt_addr;
         vm.store(0, 0x551900 | (opcode as u32));
         for x in TEST_VALUES {

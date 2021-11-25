@@ -26,6 +26,10 @@ pub extern fn mijit_beetle_drop(_vm: Box<VM>) {}
 #[no_mangle]
 pub extern fn mijit_beetle_registers_mut(vm: &mut VM) -> &mut Registers { vm.registers_mut() }
 
+/** Read M0. */
+#[no_mangle]
+pub extern fn mijit_beetle_M0(vm: &VM) -> *const u32 { vm.memory().as_ptr() }
+
 /**
  * Run the code at address `ep`.
  */

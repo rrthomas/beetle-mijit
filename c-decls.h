@@ -17,8 +17,8 @@ typedef struct mijit_beetle_VM mijit_beetle_VM;
 
 typedef struct mijit_beetle_Registers {
     uint32_t ep;
+    uint32_t i;
     uint32_t a;
-    uint64_t m0;
     uint32_t memory;
     uint32_t sp;
     uint32_t rp;
@@ -39,6 +39,8 @@ mijit_beetle_VM *mijit_beetle_new(
 void mijit_beetle_drop(mijit_beetle_VM *vm);
 
 mijit_beetle_Registers *mijit_beetle_registers_mut(mijit_beetle_VM *vm);
+
+uint32_t *mijit_beetle_M0(mijit_beetle_VM *vm);
 
 int mijit_beetle_run(mijit_beetle_VM *vm, uint32_t ep);
 

@@ -26,11 +26,11 @@ const R1: Register = REGISTERS[1];
 const R2: Register = REGISTERS[2];
 const R3: Register = REGISTERS[3];
 const BEP: Register = REGISTERS[4];
-const BA: Register = REGISTERS[5];
-const BSP: Register = REGISTERS[6];
-const BRP: Register = REGISTERS[7];
-const M0: Register = REGISTERS[8];
-const OPCODE: Register = REGISTERS[9];
+const BI: Register = REGISTERS[5];
+const BA: Register = REGISTERS[6];
+const BSP: Register = REGISTERS[7];
+const BRP: Register = REGISTERS[8];
+const M0: Register = REGISTERS[9];
 
 //-----------------------------------------------------------------------------
 
@@ -109,47 +109,47 @@ impl code::Machine for Machine {
             State::Pick => vec![BA, R2],
             State::Roll => vec![BA, R2],
             State::Qdup => vec![BA, R2],
-            State::DivTest => vec![BA, OPCODE, R2],
-            State::Divide => vec![BA, OPCODE, R2],
-            State::Lshift => vec![BA, OPCODE, R2, R3],
-            State::Rshift => vec![BA, OPCODE, R2, R3],
+            State::DivTest => vec![BA, BI, R2],
+            State::Divide => vec![BA, BI, R2],
+            State::Lshift => vec![BA, BI, R2, R3],
+            State::Rshift => vec![BA, BI, R2, R3],
             State::Branch => vec![],
             State::Branchi => vec![BA],
             State::Qbranch => vec![BA, R2],
             State::Qbranchi => vec![BA, R2],
-            State::Loop => vec![BA, OPCODE],
-            State::Loopi => vec![BA, OPCODE],
-            State::PloopTest => vec![BA, OPCODE],
-            State::Ploop => vec![BA, OPCODE, R2, R3],
-            State::PloopiTest => vec![BA, OPCODE],
-            State::Ploopi => vec![BA, OPCODE, R2, R3],
-            State::Dispatch => vec![BA, OPCODE],
+            State::Loop => vec![BA, BI],
+            State::Loopi => vec![BA, BI],
+            State::PloopTest => vec![BA, BI],
+            State::Ploop => vec![BA, BI, R2, R3],
+            State::PloopiTest => vec![BA, BI],
+            State::Ploopi => vec![BA, BI, R2, R3],
+            State::Dispatch => vec![BA, BI],
         }.into_iter().map(Variable::Register));
         let prologue = {
             let mut b = Builder::new();
             b.load_register(BEP, public_register!(ep));
+            b.load_register(BI, public_register!(i));
             b.load_register(BA, public_register!(a));
             b.load_register(BSP, public_register!(sp));
             b.load_register(BRP, public_register!(rp));
-            b.load_register64(M0, public_register!(m0));
-            b.load_register(OPCODE, private_register!(opcode));
+            b.load_register64(M0, private_register!(m0));
             b.load_register(R2, private_register!(r2));
             b.load_register(R3, private_register!(r3));
             b.finish()
         };
         let epilogue = {
             let mut b = Builder::new();
-            for v in [BA, OPCODE, R2, R3] {
+            for v in [BA, BI, R2, R3] {
                 if !live_values.contains(&Variable::Register(v)) {
                     b.const64(v, 0xDEADDEADDEADDEADu64);
                 }
             }
             b.store_register(BEP, public_register!(ep));
+            b.store_register(BI, public_register!(i));
             b.store_register(BA, public_register!(a));
             b.store_register(BSP, public_register!(sp));
             b.store_register(BRP, public_register!(rp));
-            b.store_register64(M0, public_register!(m0));
-            b.store_register(OPCODE, private_register!(opcode));
+            b.store_register64(M0, private_register!(m0));
             b.store_register(R2, private_register!(r2));
             b.store_register(R3, private_register!(r3));
             b.finish()
@@ -165,7 +165,7 @@ impl code::Machine for Machine {
     fn code(&self, state: Self::State) -> Switch<Case<Result<Self::State, Self::Trap>>> {
         match state {
             State::Root => Switch::always(build(|b| {
-                b.const_binary(And, OPCODE, BA, 0xFF);
+                b.const_binary(And, BI, BA, 0xFF);
                 b.const_binary(Asr, BA, BA, 8);
             }, Ok(State::Dispatch))),
             State::Next => Switch::always(build(|b| {
@@ -210,7 +210,7 @@ impl code::Machine for Machine {
             State::DivTest => Switch::if_(
                 R2.into(), // denominator.
                 build(|b| {
-                    b.const_binary(Sub, OPCODE, OPCODE, 0x26); // FIXME: Symbolic constant.
+                    b.const_binary(Sub, BI, BI, 0x26); // FIXME: Symbolic constant.
                     b.load(R3, BSP);
                 }, Ok(State::Divide)),
                 build(|b| {
@@ -219,41 +219,41 @@ impl code::Machine for Machine {
                 }, Ok(State::Throw)),
             ),
             State::Divide => Switch::new(
-                OPCODE.into(), // Beetle opcode - 0x26. FIXME: Symbolic constant.
+                BI.into(), // Beetle opcode - 0x26. FIXME: Symbolic constant.
                 Box::new([
                     // /
                     build(|b| {
                         // If denominator (`R2`) is negative,
                         // negate numerator (`R3`) and denominator.
-                        b.const_binary(Asr, OPCODE, R2, 31);
-                        b.binary(Xor, R1, R3, OPCODE);
-                        b.binary(Sub, R3, R1, OPCODE);
-                        b.binary(Xor, R2, R2, OPCODE);
-                        b.binary(Sub, R2, R2, OPCODE);
+                        b.const_binary(Asr, BI, R2, 31);
+                        b.binary(Xor, R1, R3, BI);
+                        b.binary(Sub, R3, R1, BI);
+                        b.binary(Xor, R2, R2, BI);
+                        b.binary(Sub, R2, R2, BI);
                         // If the numerator is negative, invert it.
                         // If `R3` is `0x80000000` it can be positive or
                         // negative depending on whether `R3` was negated.
-                        // So test `R1 < OPCODE`, not `R3 < 0`.
-                        b.binary(Lt, OPCODE, R1, OPCODE);
-                        b.binary(Xor, R3, R3, OPCODE);
+                        // So test `R1 < BI`, not `R3 < 0`.
+                        b.binary(Lt, BI, R1, BI);
+                        b.binary(Xor, R3, R3, BI);
                         // Now both `R3` and `R2` are non-negative. Use `UDiv`.
                         b.binary(UDiv, R2, R3, R2);
                         // If the numerator was negative, invert the quotient.
-                        b.binary(Xor, R2, R2, OPCODE);
+                        b.binary(Xor, R2, R2, BI);
                         b.store(R2, BSP);
                     }, Ok(State::Root)),
                     // MOD
                     build(|b| {
                         // See "/".
-                        b.const_binary(Asr, OPCODE, R2, 31);
-                        b.binary(Xor, R1, R3, OPCODE);
-                        b.binary(Sub, R3, R1, OPCODE);
-                        b.binary(Xor, R2, R2, OPCODE);
-                        b.binary(Sub, R2, R2, OPCODE);
-                        b.binary(Lt, OPCODE, R1, OPCODE);
-                        b.binary(Xor, R3, R3, OPCODE);
+                        b.const_binary(Asr, BI, R2, 31);
+                        b.binary(Xor, R1, R3, BI);
+                        b.binary(Sub, R3, R1, BI);
+                        b.binary(Xor, R2, R2, BI);
+                        b.binary(Sub, R2, R2, BI);
+                        b.binary(Lt, BI, R1, BI);
+                        b.binary(Xor, R3, R3, BI);
                         b.binary(UDiv, R2, R3, R2);
-                        b.binary(Xor, R2, R2, OPCODE);
+                        b.binary(Xor, R2, R2, BI);
                         // Compute remainder.
                         b.const_binary(Sub, R1, BSP, CELL);
                         b.load(R1, R1);
@@ -265,15 +265,15 @@ impl code::Machine for Machine {
                     // /MOD
                     build(|b| {
                         // See "/".
-                        b.const_binary(Asr, OPCODE, R2, 31);
-                        b.binary(Xor, R1, R3, OPCODE);
-                        b.binary(Sub, R3, R1, OPCODE);
-                        b.binary(Xor, R2, R2, OPCODE);
-                        b.binary(Sub, R2, R2, OPCODE);
-                        b.binary(Lt, OPCODE, R1, OPCODE);
-                        b.binary(Xor, R3, R3, OPCODE);
+                        b.const_binary(Asr, BI, R2, 31);
+                        b.binary(Xor, R1, R3, BI);
+                        b.binary(Sub, R3, R1, BI);
+                        b.binary(Xor, R2, R2, BI);
+                        b.binary(Sub, R2, R2, BI);
+                        b.binary(Lt, BI, R1, BI);
+                        b.binary(Xor, R3, R3, BI);
                         b.binary(UDiv, R2, R3, R2);
-                        b.binary(Xor, R2, R2, OPCODE);
+                        b.binary(Xor, R2, R2, BI);
                         // Compute remainder.
                         b.const_binary(Sub, R1, BSP, CELL);
                         b.load(R1, R1);
@@ -302,23 +302,23 @@ impl code::Machine for Machine {
                         // but not in Beetle. So use `UDiv` instead.
                         // If denominator (`R2`) is negative,
                         // negate numerator (`R3`) and denominator.
-                        b.const_binary(Asr, OPCODE, R2, 31);
-                        b.binary(Xor, R1, R3, OPCODE);
-                        b.binary(Sub, R3, R1, OPCODE);
-                        b.binary(Xor, R2, R2, OPCODE);
-                        b.binary(Sub, R2, R2, OPCODE);
+                        b.const_binary(Asr, BI, R2, 31);
+                        b.binary(Xor, R1, R3, BI);
+                        b.binary(Sub, R3, R1, BI);
+                        b.binary(Xor, R2, R2, BI);
+                        b.binary(Sub, R2, R2, BI);
                         // If the numerator is negative, negate it.
                         // If `R3` is `0x80000000` it can be positive or
                         // negative depending on whether `R3` was negated.
-                        // So test `R1 < OPCODE`, not `R3 < 0`.
-                        b.binary(Lt, OPCODE, R1, OPCODE);
-                        b.binary(Xor, R3, R3, OPCODE);
-                        b.binary(Sub, R3, R3, OPCODE);
+                        // So test `R1 < BI`, not `R3 < 0`.
+                        b.binary(Lt, BI, R1, BI);
+                        b.binary(Xor, R3, R3, BI);
+                        b.binary(Sub, R3, R3, BI);
                         // Now both `R3` and `R2` are non-negative. Use `UDiv`.
                         b.binary(UDiv, R2, R3, R2);
                         // If the numerator was negative, invert the quotient.
-                        b.binary(Xor, R2, R2, OPCODE);
-                        b.binary(Sub, R2, R2, OPCODE);
+                        b.binary(Xor, R2, R2, BI);
+                        b.binary(Sub, R2, R2, BI);
                         // Compute remainder.
                         b.const_binary(Sub, R1, BSP, CELL);
                         b.load(R1, R1);
@@ -330,12 +330,12 @@ impl code::Machine for Machine {
                     }, Ok(State::Root)),
                 ]),
                 build(|b| {
-                    // Restore the `OPCODE`.
-                    b.const_binary(Add, OPCODE, OPCODE, 0x26); // FIXME: Symbolic constant.
+                    // Restore the `BI`.
+                    b.const_binary(Add, BI, BI, 0x26); // FIXME: Symbolic constant.
                 }, Err(Trap::NotImplemented)), // Should not happen.
             ),
             State::Lshift => Switch::if_(
-                OPCODE.into(), // `Ult(R2, CELL_BITS)`
+                BI.into(), // `Ult(R2, CELL_BITS)`
                 build(|b| {
                     b.binary(Lsl, R2, R3, R2);
                     b.store(R2, BSP);
@@ -346,7 +346,7 @@ impl code::Machine for Machine {
                 }, Ok(State::Root)),
             ),
             State::Rshift => Switch::if_(
-                OPCODE.into(), // `Ult(R2, CELL_BITS)`
+                BI.into(), // `Ult(R2, CELL_BITS)`
                 build(|b| {
                     b.binary(Lsr, R2, R3, R2);
                     b.store(R2, BSP);
@@ -377,7 +377,7 @@ impl code::Machine for Machine {
                 build(|_| {}, Ok(State::Branchi)),
             ),
             State::Loop => Switch::if_(
-                OPCODE.into(), // zero to exit the loop
+                BI.into(), // zero to exit the loop
                 build(|_| {}, Ok(State::Branch)),
                 build(|b| {
                     // Discard the loop index and limit.
@@ -387,7 +387,7 @@ impl code::Machine for Machine {
                 }, Ok(State::Root)),
             ),
             State::Loopi => Switch::if_(
-                OPCODE.into(), // zero to exit the loop
+                BI.into(), // zero to exit the loop
                 build(|_| {}, Ok(State::Branchi)),
                 build(|b| {
                     // Discard the loop index and limit.
@@ -395,7 +395,7 @@ impl code::Machine for Machine {
                 }, Ok(State::Next)),
             ),
             State::PloopTest => Switch::if_(
-                OPCODE.into(), // non-zero to exit the loop
+                BI.into(), // non-zero to exit the loop
                 build(|b| {
                     // Discard the loop index and limit.
                     b.const_binary(Add, BRP, BRP, 2 * CELL);
@@ -405,20 +405,20 @@ impl code::Machine for Machine {
                 build(|_| {}, Ok(State::Branch)),
             ),
             State::Ploop => Switch::if_(
-                OPCODE.into(), // Lt(step, 0)
+                BI.into(), // Lt(step, 0)
                 build(|b| {
                     b.unary(Not, R2, R2);
                     b.binary(And, R3, R3, R2);
-                    b.const_binary(Lt, OPCODE, R3, 0);
+                    b.const_binary(Lt, BI, R3, 0);
                 }, Ok(State::PloopTest)),
                 build(|b| {
                     b.unary(Not, R3, R3);
                     b.binary(And, R3, R3, R2);
-                    b.const_binary(Lt, OPCODE, R3, 0);
+                    b.const_binary(Lt, BI, R3, 0);
                 }, Ok(State::PloopTest)),
             ),
             State::PloopiTest => Switch::if_(
-                OPCODE.into(), // non-zero to exit the loop
+                BI.into(), // non-zero to exit the loop
                 build(|b| {
                     // Discard the loop index and limit.
                     b.const_binary(Add, BRP, BRP, 2 * CELL);
@@ -426,20 +426,20 @@ impl code::Machine for Machine {
                 build(|_| {}, Ok(State::Branchi)),
             ),
             State::Ploopi => Switch::if_(
-                OPCODE.into(), // Lt(step, 0)
+                BI.into(), // Lt(step, 0)
                 build(|b| {
                     b.unary(Not, R2, R2);
                     b.binary(And, R3, R3, R2);
-                    b.const_binary(Lt, OPCODE, R3, 0);
+                    b.const_binary(Lt, BI, R3, 0);
                 }, Ok(State::PloopiTest)),
                 build(|b| {
                     b.unary(Not, R3, R3);
                     b.binary(And, R3, R3, R2);
-                    b.const_binary(Lt, OPCODE, R3, 0);
+                    b.const_binary(Lt, BI, R3, 0);
                 }, Ok(State::PloopiTest)),
             ),
             State::Dispatch => Switch::new(
-                OPCODE.into(),
+                BI.into(),
                 Box::new([
                     // NEXT
                     build(|_| {}, Ok(State::Next)),
@@ -816,14 +816,14 @@ impl code::Machine for Machine {
                     build(|b| {
                         b.pop(R2, BSP);
                         b.load(R3, BSP);
-                        b.const_binary(Ult, OPCODE, R2, CELL_BITS);
+                        b.const_binary(Ult, BI, R2, CELL_BITS);
                     }, Ok(State::Lshift)),
 
                     // RSHIFT
                     build(|b| {
                         b.pop(R2, BSP);
                         b.load(R3, BSP);
-                        b.const_binary(Ult, OPCODE, R2, CELL_BITS);
+                        b.const_binary(Ult, BI, R2, CELL_BITS);
                     }, Ok(State::Rshift)),
 
                     // 1LSHIFT
@@ -961,7 +961,7 @@ impl code::Machine for Machine {
                         // Update the index.
                         b.const_binary(Add, R2, R2, 1);
                         b.push(R2, BRP);
-                        b.binary(Sub, OPCODE, R2, R3);
+                        b.binary(Sub, BI, R2, R3);
                     }, Ok(State::Loop)),
 
                     // (LOOP)I
@@ -972,41 +972,41 @@ impl code::Machine for Machine {
                         // Update the index.
                         b.const_binary(Add, R2, R2, 1);
                         b.push(R2, BRP);
-                        b.binary(Sub, OPCODE, R2, R3);
+                        b.binary(Sub, BI, R2, R3);
                     }, Ok(State::Loopi)),
 
                     // (+LOOP)
                     build(|b| {
                         // Pop the step from SP.
-                        b.pop(OPCODE, BSP);
+                        b.pop(BI, BSP);
                         // Load the index and limit from RP.
                         b.pop(R2, BRP);
                         b.load(R3, BRP);
                         // Update the index.
-                        b.binary(Add, R1, R2, OPCODE);
+                        b.binary(Add, R1, R2, BI);
                         b.push(R1, BRP);
                         // Compute the differences between old and new indexes and limit.
                         b.binary(Sub, R2, R2, R3);
                         b.binary(Sub, R3, R1, R3);
                         // Is the step negative?
-                        b.const_binary(Lt, OPCODE, OPCODE, 0);
+                        b.const_binary(Lt, BI, BI, 0);
                     }, Ok(State::Ploop)),
 
                     // (+LOOP)I
                     build(|b| {
                         // Pop the step from SP.
-                        b.pop(OPCODE, BSP);
+                        b.pop(BI, BSP);
                         // Load the index and limit from RP.
                         b.pop(R2, BRP);
                         b.load(R3, BRP);
                         // Update the index.
-                        b.binary(Add, R1, R2, OPCODE);
+                        b.binary(Add, R1, R2, BI);
                         b.push(R1, BRP);
                         // Compute the differences between old and new indexes and limit.
                         b.binary(Sub, R2, R2, R3);
                         b.binary(Sub, R3, R1, R3);
                         // Is the step negative?
-                        b.const_binary(Lt, OPCODE, OPCODE, 0);
+                        b.const_binary(Lt, BI, BI, 0);
                     }, Ok(State::Ploopi)),
 
                     // UNLOOP
