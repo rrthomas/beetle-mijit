@@ -91,7 +91,7 @@ use machine::{State, Trap};
 #[derive(Debug)]
 pub enum BeetleExit {
     Halt(u32),
-    NotImplemented(u8),
+    NotImplemented,
     Undefined(u8),
 }
 
@@ -276,7 +276,7 @@ impl VM {
         let opcode = self.registers_mut().i as u8;
         match trap {
             Trap::Halt => BeetleExit::Halt(self.pop()),
-            Trap::NotImplemented => BeetleExit::NotImplemented(opcode as u8),
+            Trap::NotImplemented => BeetleExit::NotImplemented,
             Trap::Undefined => BeetleExit::Undefined(opcode as u8),
         }
     }

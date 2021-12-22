@@ -131,9 +131,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 unsafe {libc::exit(reason as i32)};
             }
         },
-        BeetleExit::NotImplemented(opcode) => {
+        BeetleExit::NotImplemented => {
             println!("{:#?}", vm);
-            panic!("Opcode {:#x} is not implemented", opcode);
+            panic!("Opcode {:#x} is not implemented", vm.registers().i);
         },
         BeetleExit::Undefined(opcode) => {
             println!("{:#?}", vm);

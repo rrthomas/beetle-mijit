@@ -59,6 +59,7 @@ pub enum State {
     Ploop,
     PloopiTest,
     Ploopi,
+    NotImplemented,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -123,6 +124,7 @@ impl code::Machine for Machine {
             State::PloopiTest => vec![BA, BI],
             State::Ploopi => vec![BA, BI, R2, R3],
             State::Dispatch => vec![BA, BI],
+            State::NotImplemented => vec![BA, BI],
         }.into_iter().map(Variable::Register));
         let prologue = {
             let mut b = Builder::new();
@@ -331,7 +333,7 @@ impl code::Machine for Machine {
                 build(|b| {
                     // Restore the `BI`.
                     b.const_binary(Add, BI, BI, 0x26); // FIXME: Symbolic constant.
-                }, Err(Trap::NotImplemented)), // Should not happen.
+                }, Ok(State::NotImplemented)), // Should not happen.
             ),
             State::Lshift => Switch::if_(
                 BI.into(), // `Ult(R2, CELL_BITS)`
@@ -437,6 +439,10 @@ impl code::Machine for Machine {
                     b.const_binary(Lt, BI, R3, 0);
                 }, Ok(State::PloopiTest)),
             ),
+            State::NotImplemented => Switch::always(build(|b| {
+                b.const_binary(Lsl, BA, BA, 8);
+                b.binary(Or, BA, BA, BI);
+            }, Err(Trap::NotImplemented))),
             State::Dispatch => Switch::new(
                 BI.into(),
                 Box::new([
@@ -1046,15 +1052,13 @@ impl code::Machine for Machine {
                     }, Ok(State::Root)),
 
                     // LIB
-                    build(|_| {}, Err(Trap::NotImplemented)),
+                    build(|_| {}, Ok(State::NotImplemented)),
 
                     // UNDEFINED
                     build(|_| {}, Err(Trap::Undefined)),
 
                     // LINK
-                    build(|_| {
-                        // WONTFIX: no sensible way to call machine code.
-                    }, Err(Trap::NotImplemented)),
+                    build(|_| {}, Ok(State::NotImplemented)),
 
                     // S0@
                     build(|b| {

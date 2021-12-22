@@ -38,7 +38,7 @@ pub unsafe extern fn mijit_beetle_run(vm: &mut VM, ep: u32) -> c_int {
     use BeetleExit::*;
     match vm.run(ep) {
         Halt(reason) => reason as c_int,
-        NotImplemented(_) => -511,
+        NotImplemented => -511,
         Undefined(_) => -256,
     }
 }
