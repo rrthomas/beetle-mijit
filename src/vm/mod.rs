@@ -128,14 +128,14 @@ impl VM {
         // Set memory size register.
         vm.registers_mut().memory = memory_cells.checked_mul(CELL)
             .expect("Address out of range");
-        // Allocate the data stack.
-        let sp = vm.allocate(data_cells).1;
-        vm.registers_mut().s0 = sp;
-        vm.registers_mut().sp = sp;
         // Allocate the return stack.
         let rp = vm.allocate(return_cells).1;
         vm.registers_mut().r0 = rp;
         vm.registers_mut().rp = rp;
+        // Allocate the data stack.
+        let sp = vm.allocate(data_cells).1;
+        vm.registers_mut().s0 = sp;
+        vm.registers_mut().sp = sp;
         // Allocate a word to hold a HALT instruction.
         vm.halt_addr = vm.allocate(1).0;
         vm.store(vm.halt_addr, 0x5519);
