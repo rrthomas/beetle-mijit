@@ -4,7 +4,6 @@ use mijit::code::{Global};
 
 /** Beetle's registers. */
 #[repr(C)]
-#[derive(Default)]
 pub struct Registers {
     pub ep: u32,
     pub i: u32,
@@ -34,6 +33,24 @@ impl std::fmt::Debug for Registers {
             .field("bad", &format!("{:#x}", self.bad))
             .field("not_address", &format!("{:#x}", self.not_address))
             .finish()
+    }
+}
+
+impl Default for Registers {
+    fn default() -> Self {
+        Registers {
+            ep: 0,
+            i: 0,
+            a: 0,
+            memory: 0,
+            sp: 0,
+            rp: 0,
+            s0: 0,
+            r0: 0,
+            throw: 0,
+            bad: 0xFFFFFFFF,
+            not_address: 0xFFFFFFFF,
+        }
     }
 }
 
