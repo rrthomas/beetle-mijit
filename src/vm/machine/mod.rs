@@ -174,7 +174,7 @@ impl code::Machine for Machine {
             }, Ok(State::Root))),
             State::Throw => Switch::always(build(|b| {
                 b.store_register(BEP, public_register!(bad));
-                b.load_register(BEP, public_register!(throw)); // FIXME: Add check that EP is valid.
+                b.load_register(BEP, public_register!(throw));
             }, Ok(State::Next))),
             State::Pick => Switch::new(
                 R2.into(),
@@ -359,11 +359,11 @@ impl code::Machine for Machine {
             ),
             State::Branch => Switch::always(build(|b| {
                 // Load EP from the cell it points to.
-                b.load(BEP, BEP); // FIXME: Add check that EP is valid.
+                b.load(BEP, BEP);
             }, Ok(State::Next))),
             State::Branchi => Switch::always(build(|b| {
                 b.const_binary(Mul, R1, BA, CELL);
-                b.binary(Add, BEP, BEP, R1); // FIXME: Add check that EP is valid.
+                b.binary(Add, BEP, BEP, R1);
             }, Ok(State::Next))),
             State::Qbranch => Switch::if_(
                 R2.into(),
@@ -384,7 +384,7 @@ impl code::Machine for Machine {
                     // Discard the loop index and limit.
                     b.const_binary(Add, BRP, BRP, 2 * CELL);
                     // Add 4 to EP.
-                    b.const_binary(Add, BEP, BEP, CELL); // FIXME: Add check that EP is valid.
+                    b.const_binary(Add, BEP, BEP, CELL);
                 }, Ok(State::Root)),
             ),
             State::Loopi => Switch::if_(
@@ -401,7 +401,7 @@ impl code::Machine for Machine {
                     // Discard the loop index and limit.
                     b.const_binary(Add, BRP, BRP, 2 * CELL);
                     // Add 4 to EP.
-                    b.const_binary(Add, BEP, BEP, CELL); // FIXME: Add check that EP is valid.
+                    b.const_binary(Add, BEP, BEP, CELL);
                 }, Ok(State::Root)),
                 build(|_| {}, Ok(State::Branch)),
             ),
@@ -922,14 +922,14 @@ impl code::Machine for Machine {
                     // EXECUTE
                     build(|b| {
                         b.push(BEP, BRP);
-                        b.pop(BEP, BSP); // FIXME: Add check that EP is valid.
+                        b.pop(BEP, BSP);
                     }, Ok(State::Next)),
 
                     // @EXECUTE
                     build(|b| {
                         b.push(BEP, BRP);
                         b.pop(R2, BSP);
-                        b.load(BEP, R2); // FIXME: Add check that EP is valid.
+                        b.load(BEP, R2);
                     }, Ok(State::Next)),
 
                     // CALL
@@ -945,7 +945,7 @@ impl code::Machine for Machine {
 
                     // EXIT
                     build(|b| {
-                        b.pop(BEP, BRP); // FIXME: Add check that EP is valid.
+                        b.pop(BEP, BRP);
                     }, Ok(State::Next)),
 
                     // (DO)
@@ -1031,7 +1031,7 @@ impl code::Machine for Machine {
                     // (LITERAL)
                     build(|b| {
                         // Load R2 from cell pointed to by BEP, and add 4 to EP.
-                        b.pop(R2, BEP); // FIXME: Add check that EP is now valid.
+                        b.pop(R2, BEP);
                         b.push(R2, BSP);
                     }, Ok(State::Root)),
 

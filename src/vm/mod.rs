@@ -16,6 +16,7 @@ pub struct Registers {
     pub throw: u32,
     pub bad: u32,
     pub not_address: u32,
+    pub checked: u32,
 }
 
 impl std::fmt::Debug for Registers {
@@ -50,6 +51,7 @@ impl Default for Registers {
             throw: 0,
             bad: 0xFFFFFFFF,
             not_address: 0xFFFFFFFF,
+            checked: 0, // Address checking is not implemented.
         }
     }
 }
