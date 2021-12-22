@@ -1,4 +1,4 @@
-use clap::{Parser, crate_version, crate_authors};
+use clap::Parser;
 
 pub mod vm;
 use vm::{VM, BeetleExit, DATA_CELLS, RETURN_CELLS, CELL};
@@ -99,7 +99,7 @@ fn load_object(vm: &mut VM, bytes: &[u8]) -> Result<u32, LoadObjectError> {
 //-----------------------------------------------------------------------------
 
 #[derive(Debug, Parser)]
-#[clap(version = crate_version!(), author = crate_authors!())]
+#[clap(version, author)]
 struct Opts {
     /** Set memory size to the given NUMBER of cells. 0 < NUMBER <= 1073741824. */
     #[clap(short, long, value_name="NUMBER", default_value="1048576")]
