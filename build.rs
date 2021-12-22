@@ -8,7 +8,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-fn main() -> std::io::Result<()> {
+fn main() {
     let lib = "libmijit_beetle";
     let topdir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let profile = env::var("PROFILE").unwrap();
@@ -16,7 +16,6 @@ fn main() -> std::io::Result<()> {
     let libs_dir = format!("{}/.libs", target_dir);
     let new_lib_path = PathBuf::from(format!("{}/{}.a", libs_dir, lib));
     // FIXME: add this to a fork of libtool-rs
-    fs::remove_file(new_lib_path)?;
+    let _ = fs::remove_file(new_lib_path);
     libtool::generate_convenience_lib(lib).unwrap();
-    Ok(())
 }
