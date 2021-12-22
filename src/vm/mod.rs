@@ -93,7 +93,6 @@ pub enum BeetleExit {
     Halt(u32),
     NotImplemented(u8),
     Undefined(u8),
-    Lib,
 }
 
 //-----------------------------------------------------------------------------
@@ -278,7 +277,6 @@ impl VM {
         match trap {
             Trap::Halt => BeetleExit::Halt(self.pop()),
             Trap::NotImplemented => BeetleExit::NotImplemented(opcode as u8),
-            Trap::Lib => BeetleExit::Lib,
             Trap::Undefined => BeetleExit::Undefined(opcode as u8),
         }
     }

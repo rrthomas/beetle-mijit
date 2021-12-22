@@ -65,7 +65,6 @@ pub enum State {
 pub enum Trap {
     Halt,
     NotImplemented,
-    Lib,
     Undefined,
 }
 
@@ -1047,7 +1046,7 @@ impl code::Machine for Machine {
                     }, Ok(State::Root)),
 
                     // LIB
-                    build(|_| {}, Err(Trap::Lib)),
+                    build(|_| {}, Err(Trap::NotImplemented)),
 
                     // UNDEFINED
                     build(|_| {}, Err(Trap::Undefined)),
