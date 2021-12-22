@@ -60,6 +60,7 @@ pub enum State {
     PloopiTest,
     Ploopi,
     NotImplemented,
+    Undefined,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -125,6 +126,7 @@ impl code::Machine for Machine {
             State::Ploopi => vec![BA, BI, R2, R3],
             State::Dispatch => vec![BA, BI],
             State::NotImplemented => vec![BA, BI],
+            State::Undefined => vec![BA, BI],
         }.into_iter().map(Variable::Register));
         let prologue = {
             let mut b = Builder::new();
@@ -443,6 +445,10 @@ impl code::Machine for Machine {
                 b.const_binary(Lsl, BA, BA, 8);
                 b.binary(Or, BA, BA, BI);
             }, Err(Trap::NotImplemented))),
+            State::Undefined => Switch::always(build(|b| {
+                b.const_(R2, -256i32 as u32); // Undefined opcode.
+                b.store(R2, BSP);
+            }, Ok(State::Throw))),
             State::Dispatch => Switch::new(
                 BI.into(),
                 Box::new([
@@ -1055,7 +1061,7 @@ impl code::Machine for Machine {
                     build(|_| {}, Ok(State::NotImplemented)),
 
                     // UNDEFINED
-                    build(|_| {}, Err(Trap::Undefined)),
+                    build(|_| {}, Ok(State::Undefined)),
 
                     // LINK
                     build(|_| {}, Ok(State::NotImplemented)),
@@ -1114,7 +1120,7 @@ impl code::Machine for Machine {
                         b.push(R2, BSP);
                     }, Ok(State::Root)),
                 ]),
-                build(|_| {}, Err(Trap::Undefined)),
+                build(|_| {}, Ok(State::Undefined)),
             ),
         }
     }
