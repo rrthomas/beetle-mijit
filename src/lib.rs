@@ -42,7 +42,6 @@ pub unsafe extern fn mijit_beetle_run(vm: &mut VM, ep: u32) -> c_int {
     match vm.run(ep) {
         Halt(reason) => reason as c_int,
         NotImplemented => -511,
-        Undefined(_) => -256,
     }
 }
 

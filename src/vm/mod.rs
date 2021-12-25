@@ -90,7 +90,6 @@ impl std::fmt::Debug for AllRegisters {
 pub enum BeetleExit {
     Halt(u32),
     NotImplemented,
-    Undefined(u8),
 }
 
 //-----------------------------------------------------------------------------
@@ -271,11 +270,9 @@ impl VM {
         *jit.global_mut(Global(0)) = Word {mp: (&mut self.state as *mut AllRegisters).cast()};
         let (jit, trap) = unsafe {jit.execute(&State::Root)}.expect("Execute failed");
         self.jit = Some(jit);
-        let opcode = self.registers_mut().i as u8;
         match trap {
             Trap::Halt => BeetleExit::Halt(self.pop()),
             Trap::NotImplemented => BeetleExit::NotImplemented,
-            Trap::Undefined => BeetleExit::Undefined(opcode as u8),
         }
     }
 

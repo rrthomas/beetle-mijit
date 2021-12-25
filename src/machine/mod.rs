@@ -67,7 +67,6 @@ pub enum State {
 pub enum Trap {
     Halt,
     NotImplemented,
-    Undefined,
 }
 
 //-----------------------------------------------------------------------------
