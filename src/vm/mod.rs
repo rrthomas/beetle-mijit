@@ -58,31 +58,6 @@ impl Default for Registers {
     }
 }
 
-/**
- * Beetle's registers, including those live in all [`State`]s.
- *
- * [State]: mijit::code::Machine::State
- */
-#[repr(C)]
-#[derive(Default)]
-pub struct AllRegisters {
-    pub public: Registers,
-    pub m0: u64,
-    pub r2: u32,
-    pub r3: u32,
-}
-
-impl std::fmt::Debug for AllRegisters {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        f.debug_struct("AllRegisters")
-            .field("public", &self.public)
-            .field("m0", &format!("{:#x}", self.m0))
-            .field("r2", &format!("{:#x}", self.r2))
-            .field("r3", &format!("{:#x}", self.r3))
-            .finish()
-    }
-}
-
 //-----------------------------------------------------------------------------
 
 /** The return type of `VM::run()`. */
@@ -108,7 +83,7 @@ pub struct VM {
     /** The compiled code, registers, and other compiler state. */
     jit: Option<Jit>,
     /** The Beetle state (other than the memory). */
-    state: AllRegisters,
+    state: Registers,
     /** The Beetle memory. */
     memory: Vec<u32>,
     /** The amount of unallocated memory, in cells. */
@@ -133,7 +108,7 @@ impl VM {
     ) -> Self {
         let mut vm = VM {
             jit: Some(jit::Jit::new(&Machine, native())),
-            state: AllRegisters::default(),
+            state: Registers::default(),
             memory: vec![0; memory_cells as usize],
             free_cells: memory_cells,
             halt_addr: 0,
@@ -156,10 +131,10 @@ impl VM {
     }
 
     /** Read the public registers. */
-    pub fn registers(&self) -> &Registers { &self.state.public }
+    pub fn registers(&self) -> &Registers { &self.state }
 
     /** Read or write the public registers. */
-    pub fn registers_mut(&mut self) -> &mut Registers { &mut self.state.public }
+    pub fn registers_mut(&mut self) -> &mut Registers { &mut self.state }
 
     /** Read the `M0` register. */
     pub fn memory(&self) -> &[u32] { &self.memory }
@@ -265,9 +240,11 @@ impl VM {
     pub fn run(&mut self, ep: u32) -> BeetleExit {
         assert!(Self::is_aligned(ep));
         self.registers_mut().ep = ep;
-        self.state.m0 = self.memory.as_mut_ptr() as u64;
         let mut jit = self.jit.take().expect("Trying to call run() after error");
-        *jit.global_mut(Global(0)) = Word {mp: (&mut self.state as *mut AllRegisters).cast()};
+        *jit.global_mut(Global(0)) = Word {mp: (&mut self.state as *mut Registers).cast()};
+        *jit.global_mut(Global(1)) = Word {mp: (self.memory.as_mut_ptr()).cast()};
+        *jit.global_mut(Global(2)) = Word {u: 0xDEADDEADDEADDEAD};
+        *jit.global_mut(Global(3)) = Word {u: 0xDEADDEADDEADDEAD};
         let (jit, trap) = unsafe {jit.execute(&State::Root)}.expect("Execute failed");
         self.jit = Some(jit);
         match trap {
@@ -284,7 +261,10 @@ impl VM {
 
 impl std::fmt::Debug for VM {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        self.state.fmt(f)
+        f.debug_struct("VM")
+            .field("state", &self.state)
+            .field("m0", &format!("{:#x}", self.memory().as_ptr() as u64))
+            .finish()
     }
 }
 

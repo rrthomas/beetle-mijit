@@ -140,15 +140,6 @@ impl Builder {
     }
 
     /**
-     * Load 64 bits from host address `Global(0) + offset`.
-     * `TEMP` is corrupted.
-     */
-    pub fn load_register64(&mut self, dest: Register, offset: usize) {
-        self.register_address(TEMP, offset);
-        self.0.push(Load(dest, (TEMP.into(), Eight), AM_REGISTER));
-    }
-
-    /**
      * Store 32 bits to host address `Global(0) + offset`.
      * `TEMP` is corrupted.
      */
@@ -157,13 +148,12 @@ impl Builder {
         self.0.push(Store(TEMP, src.into(), (TEMP.into(), Four), AM_REGISTER));
     }
 
-    /**
-     * Store 64 bits to host address `Global(0) + offset`.
-     * `TEMP` is corrupted.
-     */
-    pub fn store_register64(&mut self, src: Register, offset: usize) {
-        self.register_address(TEMP, offset);
-        self.0.push(Store(TEMP, src.into(), (TEMP.into(), Eight), AM_REGISTER));
+    pub fn load_global(&mut self, dest: Register, src: Global) {
+        self.0.push(Move(dest.into(), src.into()))
+    }
+
+    pub fn store_global(&mut self, src: Register, dest: Global) {
+        self.0.push(Move(dest.into(), src.into()))
     }
 
     /**

@@ -9,7 +9,7 @@ use mijit::code::{
 use UnaryOp::*;
 use BinaryOp::*;
 
-use super::vm::{Registers, AllRegisters};
+use super::vm::{Registers};
 
 /** The number of bytes in a cell. */
 pub const CELL: u32 = 4;
@@ -75,16 +75,9 @@ mod builder;
 use builder::{build, Builder};
 
 /** Returns the offset of `$field`. */
-macro_rules! private_register {
+macro_rules! register {
     ($field: ident) => {
-        offset_of!(AllRegisters, $field)
-    }
-}
-
-/** Returns the offset of `$field`. */
-macro_rules! public_register {
-    ($field: ident) => {
-        offset_of!(AllRegisters, public) + offset_of!(Registers, $field)
+        offset_of!(Registers, $field)
     }
 }
 
@@ -97,7 +90,7 @@ impl code::Machine for Machine {
 
     type Trap = Trap;
 
-    fn num_globals(&self) -> usize { 1 }
+    fn num_globals(&self) -> usize { 4 }
 
     fn marshal(&self, state: Self::State) -> Marshal {
         let mut live_values = vec![Global(0).into(), BEP.into(), BSP.into(), BRP.into(), M0.into()];
@@ -129,14 +122,14 @@ impl code::Machine for Machine {
         }.into_iter().map(Variable::Register));
         let prologue = {
             let mut b = Builder::new();
-            b.load_register(BEP, public_register!(ep));
-            b.load_register(BI, public_register!(i));
-            b.load_register(BA, public_register!(a));
-            b.load_register(BSP, public_register!(sp));
-            b.load_register(BRP, public_register!(rp));
-            b.load_register64(M0, private_register!(m0));
-            b.load_register(R2, private_register!(r2));
-            b.load_register(R3, private_register!(r3));
+            b.load_register(BEP, register!(ep));
+            b.load_register(BI, register!(i));
+            b.load_register(BA, register!(a));
+            b.load_register(BSP, register!(sp));
+            b.load_register(BRP, register!(rp));
+            b.load_global(M0, Global(1));
+            b.load_global(R2, Global(2));
+            b.load_global(R3, Global(3));
             b.finish()
         };
         let epilogue = {
@@ -146,14 +139,14 @@ impl code::Machine for Machine {
                     b.const64(v, 0xDEADDEADDEADDEADu64);
                 }
             }
-            b.store_register(BEP, public_register!(ep));
-            b.store_register(BI, public_register!(i));
-            b.store_register(BA, public_register!(a));
-            b.store_register(BSP, public_register!(sp));
-            b.store_register(BRP, public_register!(rp));
-            b.store_register64(M0, private_register!(m0));
-            b.store_register(R2, private_register!(r2));
-            b.store_register(R3, private_register!(r3));
+            b.store_register(BEP, register!(ep));
+            b.store_register(BI, register!(i));
+            b.store_register(BA, register!(a));
+            b.store_register(BSP, register!(sp));
+            b.store_register(BRP, register!(rp));
+            b.store_global(M0, Global(1));
+            b.store_global(R2, Global(2));
+            b.store_global(R3, Global(3));
             b.finish()
         };
         let convention = Convention {
@@ -174,8 +167,8 @@ impl code::Machine for Machine {
                 b.pop(BA, BEP);
             }, Ok(State::Root))),
             State::Throw => Switch::always(build(|b| {
-                b.store_register(BEP, public_register!(bad));
-                b.load_register(BEP, public_register!(throw));
+                b.store_register(BEP, register!(bad));
+                b.load_register(BEP, register!(throw));
             }, Ok(State::Next))),
             State::Pick => Switch::new(
                 R2.into(),
@@ -1067,55 +1060,55 @@ impl code::Machine for Machine {
 
                     // S0@
                     build(|b| {
-                        b.load_register(R2, public_register!(s0));
+                        b.load_register(R2, register!(s0));
                         b.push(R2, BSP);
                     }, Ok(State::Root)),
 
                     // S0!
                     build(|b| {
                         b.pop(R2, BSP);
-                        b.store_register(R2, public_register!(s0));
+                        b.store_register(R2, register!(s0));
                     }, Ok(State::Root)),
 
                     // R0@
                     build(|b| {
-                        b.load_register(R2, public_register!(r0));
+                        b.load_register(R2, register!(r0));
                         b.push(R2, BSP);
                     }, Ok(State::Root)),
 
                     // R0!
                     build(|b| {
                         b.pop(R2, BSP);
-                        b.store_register(R2, public_register!(r0));
+                        b.store_register(R2, register!(r0));
                     }, Ok(State::Root)),
 
                     // 'THROW@
                     build(|b| {
-                        b.load_register(R2, public_register!(throw));
+                        b.load_register(R2, register!(throw));
                         b.push(R2, BSP);
                     }, Ok(State::Root)),
 
                     // 'THROW!
                     build(|b| {
                         b.pop(R2, BSP);
-                        b.store_register(R2, public_register!(throw));
+                        b.store_register(R2, register!(throw));
                     }, Ok(State::Root)),
 
                     // MEMORY@
                     build(|b| {
-                        b.load_register(R2, public_register!(memory));
+                        b.load_register(R2, register!(memory));
                         b.push(R2, BSP);
                     }, Ok(State::Root)),
 
                     // 'BAD@
                     build(|b| {
-                        b.load_register(R2, public_register!(bad));
+                        b.load_register(R2, register!(bad));
                         b.push(R2, BSP);
                     }, Ok(State::Root)),
 
                     // -ADDRESS@
                     build(|b| {
-                        b.load_register(R2, public_register!(not_address));
+                        b.load_register(R2, register!(not_address));
                         b.push(R2, BSP);
                     }, Ok(State::Root)),
                 ]),
