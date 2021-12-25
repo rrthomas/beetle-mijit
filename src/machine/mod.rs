@@ -64,10 +64,7 @@ pub enum State {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum Trap {
-    Halt,
-    NotImplemented,
-}
+pub struct NotImplemented;
 
 //-----------------------------------------------------------------------------
 
@@ -88,7 +85,7 @@ pub struct Machine;
 impl code::Machine for Machine {
     type State = State;
 
-    type Trap = Trap;
+    type Trap = NotImplemented;
 
     fn num_globals(&self) -> usize { 4 }
 
@@ -174,7 +171,7 @@ impl code::Machine for Machine {
                     b.load(R2, R1);
                     b.store(R2, BSP);
                 }, Ok(State::Root))).collect(),
-                build(|_| {}, Err(Trap::Halt)),
+                build(|_| {}, Ok(State::NotImplemented)),
             ),
             State::Roll => Switch::new(
                 R2.into(),
@@ -190,7 +187,7 @@ impl code::Machine for Machine {
                     b.const_binary(Add, R1, BSP, u * CELL);
                     b.store(R3, R1);
                 }, Ok(State::Root))).collect(),
-                build(|_| {}, Err(Trap::Halt)),
+                build(|_| {}, Ok(State::NotImplemented)),
             ),
             State::Qdup => Switch::if_(
                 R2.into(),
@@ -439,7 +436,7 @@ impl code::Machine for Machine {
             State::NotImplemented => Switch::always(build(|b| {
                 b.const_binary(Lsl, BA, BA, 8);
                 b.binary(Or, BA, BA, BI);
-            }, Err(Trap::NotImplemented))),
+            }, Err(NotImplemented))),
             State::Undefined => Switch::always(build(|b| {
                 b.const_(R2, -256i32 as u32); // Undefined opcode.
                 b.store(R2, BSP);
@@ -1051,7 +1048,7 @@ impl code::Machine for Machine {
                     build(|_| {}, Ok(State::Throw)),
 
                     // HALT
-                    build(|_| {}, Err(Trap::Halt)),
+                    build(|_| {}, Ok(State::NotImplemented)),
 
                     // EP@
                     build(|b| {

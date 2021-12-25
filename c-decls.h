@@ -33,6 +33,6 @@ mijit_beetle_jit *mijit_beetle_new();
 
 void mijit_beetle_drop(mijit_beetle_jit *jit);
 
-int mijit_beetle_run(mijit_beetle_jit *jit, uint32_t *m0, mijit_beetle_registers *registers);
+void mijit_beetle_run(mijit_beetle_jit *jit, uint32_t *m0, mijit_beetle_registers *registers);
 
 #endif

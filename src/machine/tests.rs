@@ -2,16 +2,7 @@ use mijit::target::{Native, native, Word};
 use mijit::{jit};
 use mijit::code::{Global};
 
-use super::{Registers, CELL, Machine, State, Trap};
-
-/** The return type of `VM::run()`. */
-#[derive(Debug)]
-pub enum BeetleExit {
-    Halt(u32),
-    NotImplemented,
-}
-
-//-----------------------------------------------------------------------------
+use super::{Registers, CELL, Machine, State, NotImplemented};
 
 /** The suggested size of the Beetle memory, in cells. */
 pub const MEMORY_CELLS: u32 = 1 << 20;
@@ -139,8 +130,8 @@ impl VM {
         self.store(self.registers().rp, item);
     }
 
-    /** Run the code at address `ep`. */
-    pub fn run(&mut self, ep: u32) -> BeetleExit {
+    /** Run the code at address `ep`. If it `HALT`s, return the code. */
+    pub fn run(&mut self, ep: u32) -> Option<u32> {
         assert!(Self::is_aligned(ep));
         self.registers_mut().ep = ep;
         let mut jit = self.jit.take().expect("Trying to call run() after error");
@@ -148,11 +139,14 @@ impl VM {
         *jit.global_mut(Global(1)) = Word {mp: (self.memory.as_mut_ptr()).cast()};
         *jit.global_mut(Global(2)) = Word {u: 0xDEADDEADDEADDEAD};
         *jit.global_mut(Global(3)) = Word {u: 0xDEADDEADDEADDEAD};
-        let (jit, trap) = unsafe {jit.execute(&State::Root)}.expect("Execute failed");
+        let (jit, NotImplemented) = unsafe {jit.execute(&State::Root)}.expect("Execute failed");
         self.jit = Some(jit);
-        match trap {
-            Trap::Halt => BeetleExit::Halt(self.pop()),
-            Trap::NotImplemented => BeetleExit::NotImplemented,
+        if self.registers_mut().a & 0xFF == 0x55 {
+            self.registers_mut().a >>= 8;
+            Some(self.pop())
+        } else {
+            // Some other `NotImplemented` case.
+            None
         }
     }
 
@@ -238,7 +232,7 @@ pub fn halt() {
     let mut vm = VM::new(MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
     let entry_address = vm.halt_addr;
     let exit = vm.run(entry_address);
-    assert!(matches!(exit, BeetleExit::Halt(0)));
+    assert_eq!(exit, Some(0));
     assert_eq!(vm.registers().s0, vm.registers().sp);
     assert_eq!(vm.registers().r0, vm.registers().rp);
 }
@@ -251,7 +245,7 @@ pub fn ackermann() {
     vm.push(5);
     vm.rpush(vm.halt_addr);
     let exit = vm.run(0);
-    assert!(matches!(exit, BeetleExit::Halt(0)));
+    assert_eq!(exit, Some(0));
     let result = vm.pop();
     assert_eq!(vm.registers().s0, vm.registers().sp);
     assert_eq!(vm.registers().r0, vm.registers().rp);
@@ -271,7 +265,7 @@ fn test_unary(
         println!("Operating on {:x}", x);
         vm.push(x);
         let exit = vm.run(0);
-        assert!(matches!(exit, BeetleExit::Halt(0)));
+        assert_eq!(exit, Some(0));
         let observed = vm.pop();
         assert_eq!(observed, expected(x));
         assert_eq!(vm.registers().s0, vm.registers().sp);
@@ -314,7 +308,7 @@ fn test_div(
             vm.push(x);
             vm.push(y);
             let exit = vm.run(0);
-            assert!(matches!(exit, BeetleExit::Halt(0)));
+            assert_eq!(exit, Some(0));
             if y != 0 {
                 // Division should work.
                 for z in expected(x, y) {

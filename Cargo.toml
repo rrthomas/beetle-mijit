@@ -14,6 +14,5 @@ libtool = { git = "https://github.com/rrthomas/libtool-rs" }
 crate_type = ["rlib", "staticlib"]
 
 [dependencies]
-libc = "0.2.102"
 mijit = "0.1.6"
 memoffset = "0.6"

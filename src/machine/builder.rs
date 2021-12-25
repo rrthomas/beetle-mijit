@@ -7,7 +7,7 @@ use Precision::*;
 use BinaryOp::*;
 use Width::*;
 use Action::*;
-use super::{CELL, State, Trap, TEMP, M0};
+use super::{CELL, State, NotImplemented, TEMP, M0};
 
 /**
  * Beetle's address space is unified, so we always use the same `AliasMask`.
@@ -196,8 +196,8 @@ impl Builder {
  */
 pub fn build(
     callback: impl FnOnce(&mut Builder),
-    state_or_trap: Result<State, Trap>,
-) -> Case<Result<State, Trap>> {
+    state_or_trap: Result<State, NotImplemented>,
+) -> Case<Result<State, NotImplemented>> {
     let mut b = Builder::new();
     callback(&mut b);
     Case {actions: b.0, new_state: state_or_trap}
