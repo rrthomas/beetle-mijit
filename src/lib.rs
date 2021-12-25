@@ -1,7 +1,10 @@
 use libc::{c_int};
 
+mod machine;
+use machine::{CELL, Machine, State, Trap};
+
 pub mod vm;
-pub use vm::{VM, Registers, BeetleExit, DATA_CELLS, RETURN_CELLS, CELL};
+use vm::{VM, Registers, BeetleExit};
 
 /** Allocates a new VM. */
 #[no_mangle]

@@ -9,7 +9,7 @@ use mijit::code::{
 use UnaryOp::*;
 use BinaryOp::*;
 
-use super::{Registers, AllRegisters};
+use super::vm::{Registers, AllRegisters};
 
 /** The number of bytes in a cell. */
 pub const CELL: u32 = 4;

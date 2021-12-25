@@ -2,6 +2,8 @@ use mijit::target::{Native, native, Word};
 use mijit::{jit};
 use mijit::code::{Global};
 
+use super::{CELL, Machine, State, Trap};
+
 /** Beetle's registers. */
 #[repr(C)]
 pub struct Registers {
@@ -63,11 +65,11 @@ impl Default for Registers {
  */
 #[repr(C)]
 #[derive(Default)]
-struct AllRegisters {
-    public: Registers,
-    m0: u64,
-    r2: u32,
-    r3: u32,
+pub struct AllRegisters {
+    pub public: Registers,
+    pub m0: u64,
+    pub r2: u32,
+    pub r3: u32,
 }
 
 impl std::fmt::Debug for AllRegisters {
@@ -80,12 +82,6 @@ impl std::fmt::Debug for AllRegisters {
             .finish()
     }
 }
-
-//-----------------------------------------------------------------------------
-
-mod machine;
-pub use machine::{CELL, Machine};
-use machine::{State, Trap};
 
 //-----------------------------------------------------------------------------
 
