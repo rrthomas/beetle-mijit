@@ -56,11 +56,7 @@ impl Default for Registers {
     }
 }
 
-/**
- * Beetle's registers, including those live in all [`State`]s.
- *
- * [State]: mijit::code::Machine::State
- */
+/** Beetle's registers. */
 #[repr(C)]
 #[derive(Default)]
 struct AllRegisters {
@@ -84,7 +80,7 @@ impl std::fmt::Debug for AllRegisters {
 //-----------------------------------------------------------------------------
 
 mod machine;
-pub use machine::{CELL, Machine};
+pub use machine::{CELL, Trace, Machine};
 use machine::{State, Trap};
 
 //-----------------------------------------------------------------------------
@@ -137,7 +133,7 @@ impl VM {
         return_cells: u32,
     ) -> Self {
         let mut vm = VM {
-            jit: Some(jit::Jit::new(&Machine, native())),
+            jit: Some(jit::Jit::new(&Machine(Trace::Observed), native())),
             state: AllRegisters::default(),
             memory: vec![0; memory_cells as usize],
             free_cells: memory_cells,

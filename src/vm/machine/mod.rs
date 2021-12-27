@@ -34,6 +34,19 @@ const M0: Register = REGISTERS[9];
 
 //-----------------------------------------------------------------------------
 
+/** Trace level, for debugging. */
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum Trace {
+    /** Do not trace (zero overhead). */
+    Off,
+    /** `NEXT` opcode prints the `A` register. */
+    Observed,
+    /** Like `Observed` but all other opcodes are `NotImplemented`. */
+    Expected,
+}
+
+//-----------------------------------------------------------------------------
+
 /* Control-flow states. */
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -91,7 +104,7 @@ macro_rules! public_register {
 
 /** The performance-critical part of the virtual machine. */
 #[derive(Debug)]
-pub struct Machine;
+pub struct Machine(pub Trace);
 
 impl code::Machine for Machine {
     type State = State;
@@ -166,6 +179,7 @@ impl code::Machine for Machine {
 
     #[allow(clippy::too_many_lines)]
     fn code(&self, state: Self::State) -> Switch<Case<Result<Self::State, Self::Trap>>> {
+        use Trace::*;
         match state {
             State::Root => Switch::always(build(|b| {
                 b.const_binary(And, BI, BA, 0xFF);
@@ -173,6 +187,10 @@ impl code::Machine for Machine {
             }, Ok(State::Dispatch))),
             State::Next => Switch::always(build(|b| {
                 b.pop(BA, BEP);
+                match self.0 {
+                    Off => (),
+                    Observed | Expected => b.debug(BA),
+                };
             }, Ok(State::Root))),
             State::Throw => Switch::always(build(|b| {
                 b.store_register(BEP, public_register!(bad));
@@ -449,9 +467,8 @@ impl code::Machine for Machine {
                 b.const_(R2, -256i32 as u32); // Undefined opcode.
                 b.store(R2, BSP);
             }, Ok(State::Throw))),
-            State::Dispatch => Switch::new(
-                BI.into(),
-                Box::new([
+            State::Dispatch => {
+                let mut cases = vec![
                     // NEXT
                     build(|_| {}, Ok(State::Next)),
 
@@ -1119,9 +1136,23 @@ impl code::Machine for Machine {
                         b.load_register(R2, public_register!(not_address));
                         b.push(R2, BSP);
                     }, Ok(State::Root)),
-                ]),
-                build(|_| {}, Ok(State::Undefined)),
-            ),
+                ];
+                match self.0 {
+                    Off | Observed => Switch::new(
+                        BI.into(),
+                        cases.into(),
+                        build(|_| {}, Ok(State::Undefined)),
+                    ),
+                    Expected => {
+                        cases.truncate(1);
+                        Switch::new(
+                            BI.into(),
+                            cases.into(),
+                            build(|_| {}, Ok(State::NotImplemented)),
+                        )
+                    },
+                }
+            },
         }
     }
 
