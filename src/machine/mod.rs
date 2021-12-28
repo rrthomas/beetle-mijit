@@ -1130,3 +1130,8 @@ impl code::Machine for Machine {
         vec![State::Root]
     }
 }
+
+//-----------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests;

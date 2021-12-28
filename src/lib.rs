@@ -6,8 +6,6 @@ use mijit::code::{Global};
 mod machine;
 use machine::{Registers, CELL, Machine, State, Trap};
 
-mod vm;
-
 /** The state of the JIT compiler. */
 pub struct Jit(Option<jit::Jit<Machine, Native>>);
 
