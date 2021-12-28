@@ -40,7 +40,6 @@ const M0: Register = REGISTERS[9];
 pub enum State {
     Root,
     Dispatch,
-    Next,
     Throw,
     Pick,
     Roll,
@@ -97,7 +96,6 @@ impl code::Machine for Machine {
         #[allow(clippy::match_same_arms)]
         live_values.extend(match state {
             State::Root => vec![BA],
-            State::Next => vec![],
             State::Throw => vec![],
             State::Pick => vec![BA, R2],
             State::Roll => vec![BA, R2],
@@ -163,13 +161,11 @@ impl code::Machine for Machine {
                 b.const_binary(And, BI, BA, 0xFF);
                 b.const_binary(Asr, BA, BA, 8);
             }, Ok(State::Dispatch))),
-            State::Next => Switch::always(build(|b| {
-                b.pop(BA, BEP);
-            }, Ok(State::Root))),
             State::Throw => Switch::always(build(|b| {
                 b.store_register(BEP, register!(bad));
                 b.load_register(BEP, register!(throw));
-            }, Ok(State::Next))),
+                b.pop(BA, BEP);
+            }, Ok(State::Root))),
             State::Pick => Switch::new(
                 R2.into(),
                 (0..4).map(|u| build(|b| {
@@ -354,11 +350,13 @@ impl code::Machine for Machine {
             State::Branch => Switch::always(build(|b| {
                 // Load EP from the cell it points to.
                 b.load(BEP, BEP);
-            }, Ok(State::Next))),
+                b.pop(BA, BEP);
+            }, Ok(State::Root))),
             State::Branchi => Switch::always(build(|b| {
                 b.const_binary(Mul, R1, BA, CELL);
                 b.binary(Add, BEP, BEP, R1);
-            }, Ok(State::Next))),
+                b.pop(BA, BEP);
+            }, Ok(State::Root))),
             State::Qbranch => Switch::if_(
                 R2.into(),
                 build(|b| {
@@ -368,7 +366,9 @@ impl code::Machine for Machine {
             ),
             State::Qbranchi => Switch::if_(
                 R2.into(),
-                build(|_| {}, Ok(State::Next)),
+                build(|b| {
+                    b.pop(BA, BEP);
+                }, Ok(State::Root)),
                 build(|_| {}, Ok(State::Branchi)),
             ),
             State::Loop => Switch::if_(
@@ -387,7 +387,8 @@ impl code::Machine for Machine {
                 build(|b| {
                     // Discard the loop index and limit.
                     b.const_binary(Add, BRP, BRP, 2 * CELL);
-                }, Ok(State::Next)),
+                    b.pop(BA, BEP);
+                }, Ok(State::Root)),
             ),
             State::PloopTest => Switch::if_(
                 BI.into(), // non-zero to exit the loop
@@ -417,7 +418,8 @@ impl code::Machine for Machine {
                 build(|b| {
                     // Discard the loop index and limit.
                     b.const_binary(Add, BRP, BRP, 2 * CELL);
-                }, Ok(State::Next)),
+                    b.pop(BA, BEP);
+                }, Ok(State::Root)),
                 build(|_| {}, Ok(State::Branchi)),
             ),
             State::Ploopi => Switch::if_(
@@ -445,7 +447,9 @@ impl code::Machine for Machine {
                 BI.into(),
                 Box::new([
                     // NEXT
-                    build(|_| {}, Ok(State::Next)),
+                    build(|b| {
+                        b.pop(BA, BEP);
+                    }, Ok(State::Root)),
 
                     // DUP
                     build(|b| {
@@ -921,14 +925,16 @@ impl code::Machine for Machine {
                     build(|b| {
                         b.push(BEP, BRP);
                         b.pop(BEP, BSP);
-                    }, Ok(State::Next)),
+                        b.pop(BA, BEP);
+                    }, Ok(State::Root)),
 
                     // @EXECUTE
                     build(|b| {
                         b.push(BEP, BRP);
                         b.pop(R2, BSP);
                         b.load(BEP, R2);
-                    }, Ok(State::Next)),
+                        b.pop(BA, BEP);
+                    }, Ok(State::Root)),
 
                     // CALL
                     build(|b| {
@@ -944,7 +950,8 @@ impl code::Machine for Machine {
                     // EXIT
                     build(|b| {
                         b.pop(BEP, BRP);
-                    }, Ok(State::Next)),
+                        b.pop(BA, BEP);
+                    }, Ok(State::Root)),
 
                     // (DO)
                     build(|b| {
@@ -1036,7 +1043,8 @@ impl code::Machine for Machine {
                     // (LITERAL)I
                     build(|b| {
                         b.push(BA, BSP);
-                    }, Ok(State::Next)),
+                        b.pop(BA, BEP);
+                    }, Ok(State::Root)),
 
                     // THROW
                     build(|_| {}, Ok(State::Throw)),
