@@ -4,10 +4,9 @@ use mijit::{jit};
 use mijit::code::{Global};
 
 mod machine;
-use machine::{CELL, Machine, State, Trap};
+use machine::{Registers, CELL, Machine, State, Trap};
 
 mod vm;
-use vm::{Registers};
 
 /** The state of the JIT compiler. */
 pub struct Jit(Option<jit::Jit<Machine, Native>>);
