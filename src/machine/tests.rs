@@ -252,7 +252,7 @@ pub fn ackermann() {
     assert_eq!(result, 253);
 }
 
-// Test arithmetic instructions.
+// Test unary arithmetic instructions.
 
 fn test_unary(
     opcode: u8,
@@ -274,8 +274,54 @@ fn test_unary(
 }
 
 #[test]
+fn abs() {
+    test_unary(0x2D, |x| {
+        let x = x as i32;
+        (if x == i32::MIN {
+            i32::MIN
+        } else {
+            (x as i32).abs()
+        }) as u32
+    });
+}
+
+#[test]
 fn one_lshift() {
     test_unary(0x37, |x| x << 1);
+}
+
+// Test binary arithmetic instructions.
+
+fn test_binary(
+    opcode: u8,
+    expected: fn(u32, u32) -> u32,
+) {
+    let mut vm = VM::new(MEMORY_CELLS, DATA_CELLS, RETURN_CELLS);
+    vm.registers_mut().throw = vm.halt_addr;
+    vm.store(0, 0x551900 | (opcode as u32));
+    for x in TEST_VALUES {
+        for y in TEST_VALUES {
+            println!("Operating on {:x} and {:x}", x, y);
+            vm.push(x);
+            vm.push(y);
+            let exit = vm.run(0);
+            assert_eq!(exit, Some(0));
+            let observed = vm.pop();
+            assert_eq!(observed, expected(x, y));
+            assert_eq!(vm.registers().s0, vm.registers().sp);
+            assert_eq!(vm.registers().r0, vm.registers().rp);
+        }
+    }
+}
+
+#[test]
+pub fn max() {
+    test_binary(0x2F, |x, y| std::cmp::max(x as i32, y as i32) as u32);
+}
+
+#[test]
+pub fn min() {
+    test_binary(0x30, |x, y| std::cmp::min(x as i32, y as i32) as u32);
 }
 
 // Test division instructions.
