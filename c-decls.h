@@ -29,7 +29,7 @@ typedef struct mijit_beetle_registers {
     uint32_t not_address;
 } mijit_beetle_registers;
 
-mijit_beetle_jit *mijit_beetle_new();
+mijit_beetle_jit *mijit_beetle_new(void);
 
 void mijit_beetle_drop(mijit_beetle_jit *jit);
 
