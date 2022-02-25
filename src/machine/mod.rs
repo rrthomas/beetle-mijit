@@ -4,7 +4,7 @@ use std::num::{Wrapping};
 use memoffset::{offset_of};
 use mijit::code::{
     self, UnaryOp, BinaryOp, Global, Register, REGISTERS, Variable,
-    Switch, Case, Convention, Marshal,
+    Switch, Case, Marshal,
 };
 use UnaryOp::*;
 use BinaryOp::*;
@@ -99,7 +99,7 @@ impl code::Machine for Machine {
             State::Roll => vec![BA, R2],
             State::Qdup => vec![BA, R2],
             State::DivTest => vec![BA, BI, R2],
-            State::Divide => vec![BA, BI, R2],
+            State::Divide => vec![BA, BI, R2, R3],
             State::Lshift => vec![BA, BI, R2, R3],
             State::Rshift => vec![BA, BI, R2, R3],
             State::Branch => vec![],
@@ -114,7 +114,7 @@ impl code::Machine for Machine {
             State::Ploopi => vec![BA, BI, R2, R3],
             State::Dispatch => vec![BA, BI],
             State::NotImplemented => vec![BA, BI],
-            State::Undefined => vec![BA, BI],
+            State::Undefined => vec![BA, BI], // TODO: Delete BA, BI?
         }.into_iter().map(Variable::Register));
         let prologue = {
             let mut b = Builder::new();
@@ -145,11 +145,7 @@ impl code::Machine for Machine {
             b.store_global(R3, Global(3));
             b.finish()
         };
-        let convention = Convention {
-            slots_used: 0,
-            live_values: live_values.into(),
-        };
-        Marshal {prologue, convention, epilogue}
+        Marshal {prologue, epilogue}
     }
 
     #[allow(clippy::too_many_lines)]
