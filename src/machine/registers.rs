@@ -51,3 +51,18 @@ impl Default for Registers {
         }
     }
 }
+
+/** Mijit Registers for the commonly used Beetle registers. */
+pub mod map {
+    use mijit::code::{Register, REGISTERS};
+
+    pub const R1: Register = REGISTERS[1];
+    pub const R2: Register = REGISTERS[2];
+    pub const R3: Register = REGISTERS[3];
+    pub const BEP: Register = REGISTERS[4];
+    pub const BI: Register = REGISTERS[5];
+    pub const BA: Register = REGISTERS[6];
+    pub const BSP: Register = REGISTERS[7];
+    pub const BRP: Register = REGISTERS[8];
+    pub const M0: Register = REGISTERS[9];
+}
